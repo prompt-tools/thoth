@@ -39,7 +39,7 @@ npm run dev
 - **零填空** — 全程选择题驱动
 - **对用户免费** — 无需自带 key,模型额度由我们承担
 - **零登录**
-- **即时复制** — 中文 / 英文 prompt、JSON brief
+- **即时复制** — 中文 / 英文 prompt、JSON brief、Markdown
 
 ## 图片维度
 

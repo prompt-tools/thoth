@@ -49,7 +49,7 @@ dimensions into understandable choices.
 - **Zero typing** — selection-based input
 - **Free for users** — no key needed; model usage is owner-funded
 - **Zero login**
-- **Instant copy** — Chinese prompt, English prompt, JSON brief
+- **Instant copy** — Chinese prompt, English prompt, JSON brief, Markdown
 
 ## Stack
 
