@@ -1,37 +1,65 @@
-# Controllable Image Prompt Guide / 可控图片提示词向导
+# thoth — 可控图片提示词向导（上线版）
 
 ## Project / 项目
 
-An **image-only** prompt wizard forked from [controllable-prompt-guide](https://github.com/prompt-tools/controllable-prompt-guide). Users build copy-ready image prompts through guided choices — no typing, no jargon, no paid APIs.
+An **image-only** prompt wizard. A lightweight AI agent decides which question to
+ask next based on what the user has already chosen, narrowing the option catalog
+each turn; the final prompt is **deterministically stitched** from the selected
+options (no AI rewriting of meaning). Forked from
+[controllable-prompt-guide](https://github.com/prompt-tools/controllable-prompt-guide)
+and decoupled into a clean, user-facing production app.
 
-面向非专业用户的**图片**提示词向导（从双工种主仓库拆出）。只需做选择题，把需求转成可复制到通用图片模型里的专业提示词。
+面向非专业用户的**图片**提示词向导(上线版)。一个轻量 AI agent 根据用户已有的选择,
+动态决定下一题、收窄候选选项;最终提示词由选中的选项**确定性拼接**(不靠 AI 改写语义)。
+从主仓库拆出,与评测/旧版彻底解耦,只保留面向用户的现版本。
 
-- **Image-only / 仅图片**: `image_prompt` + `generic_image` — no video work type or targets
-- **Config-driven / 配置驱动**: New options live under `options/image/`
-- **Selection-first UX / 选择优先**: All input is choice-based
-- **Deterministic rendering / 确定性渲染**: Template stitching, not AI rewriting
-- **Static export / 静态导出**: `npm run build` → `out/`
+- **Image-only / 仅图片**: `image_prompt` + `generic_image` — no video work type
+- **Adaptive / 自适应**: an agent picks the next dimension + its candidate options
+- **Selection-first / 选择优先**: all input is choice-based (no typing required)
+- **Deterministic render / 确定性渲染**: template stitching, not AI rewriting
+- **Server app / 服务端应用**: runs on Vercel; `/api/llm` calls the model with a
+  built-in key (owner-funded) so users need no key of their own
 
 ## Stack / 技术栈
 
-Next.js 15, TypeScript 5.7, React 19, Tailwind CSS v3, Vitest 3
+Next.js 15, TypeScript 5.7, React 19, Tailwind CSS v3, Vitest 4
 
 ## Architecture / 架构
 
 ```
-src/lib/prompt/
-├── registry/
-├── init.ts
-├── adapters.ts
-├── brief.ts
-├── heuristics.ts
-├── types.ts
-├── validation.ts
-├── options/image/          # Image option catalogs only
-├── targets/generic-image.target.ts
-├── renderers/generic-image.renderer.ts
-└── work-types/image-prompt.worktype.ts
+src/
+├── app/
+│   ├── page.tsx                      # Home = the adaptive wizard
+│   └── api/
+│       ├── llm/route.ts              # Server proxy → model provider (built-in key)
+│       └── telemetry/route.ts        # Per-step session recording → Langfuse
+├── components/prompt-guide/
+│   ├── agent-demo-client.tsx         # Wizard UI (describe → ask → done)
+│   ├── use-agent-guide-controller.ts # Flow state, fetch-next, auto-fill, telemetry
+│   ├── option-card.tsx · output-panel.tsx · brief-preview.tsx · copy-button.tsx
+│   └── error-boundary.tsx
+└── lib/prompt/
+    ├── agent/                        # Adaptive decision engine
+    │   ├── client.ts                 # buildTurnRequest / autoFill (seed-aware)
+    │   ├── active-dimensions.ts      # which dims are active for a precision tier
+    │   ├── decision.ts · fill.ts · catalog-manifest.ts · debug-log.ts
+    ├── options/image/                # Image option catalogs only
+    ├── renderers/generic-image.renderer.ts
+    ├── targets/generic-image.target.ts
+    ├── work-types/image-prompt.worktype.ts
+    ├── registry/ · init.ts · adapters.ts · brief/ · heuristics.ts
+    └── types.ts · validation.ts
 ```
+
+## Runtime config / 运行时配置
+
+Server-only env vars (never `NEXT_PUBLIC_`, never in the browser bundle):
+
+| Var | Purpose |
+|-----|---------|
+| `DEMO_DEEPSEEK_KEY` | Built-in model key injected by `/api/llm` (api.deepseek.com only) |
+| `LANGFUSE_BASE_URL` / `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` | Telemetry sink; absent → telemetry is a no-op |
+| `NEXT_PUBLIC_AGENT_DEMO_BUILTIN=1` | Skip the BYOK key gate, use the built-in key (public flag) |
 
 ## Commands / 命令
 
@@ -44,12 +72,8 @@ npm run build
 codegraph init -i    # optional: local code intelligence index
 ```
 
-## Fix workflow / 修复流程
-
-Delivery protocol **v3** (adopted): `docs/process/WORKFLOW-v3.md` — triage, role split, git verdicts, `npm run verify`, CI `protocol` check.  
-Step 6/8 criteria text: `.planning/REVIEW-PROTOCOL.md` v2.1.  
-Optional hooks: `git config core.hooksPath .githooks`
-
 ## Sister repo / 姊妹仓库
 
-Video + dual work-type switching remains in **prompt-tools/controllable-prompt-guide**.
+Video + dual work-type switching, plus the eval/test harness, stay in
+**prompt-tools/controllable-prompt-guide** (and its eval fork). thoth carries
+production code only.
