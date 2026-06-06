@@ -1,0 +1,33 @@
+node_modules/
+.next/
+out/
+coverage/
+.env
+.env*.local
+*.log
+tsconfig.tsbuildinfo
+.planning/
+.omx/
+.memory/
+.vercel
+.codegraph/
+.cursor/
+.claude/
+# Local corpus + generated extracts (clone + JSONL — do not commit)
+.research/awesome-gpt-image-2/
+.research/out/
+.research/backups/*
+!.research/backups/README.md
+
+# local eval credentials
+.env.eval
+
+# ruflo / claude-flow local runtime state (machine-local; never commit)
+.claude-flow/
+.swarm/
+ruvector.db
+
+# ruflo hive-mind runtime state
+.hive-mind/
+# playwright-mcp diagnostic artifacts
+.playwright-mcp/

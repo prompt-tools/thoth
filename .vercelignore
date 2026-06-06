@@ -1,0 +1,12 @@
+# Local runtime / dev artifacts — not needed for the Next.js build, and some
+# contain unix sockets (e.g. .codegraph/daemon.sock) that break the upload.
+.codegraph/
+.hive-mind/
+.playwright-mcp/
+.swarm/
+.claude-flow/
+.claude/
+.research/
+.githooks/
+.planning/
+*.sock
