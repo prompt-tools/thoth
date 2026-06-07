@@ -13,7 +13,7 @@ import { suggestedIdsFor } from "@/lib/prompt/agent/audit-model";
 import { resolveVisibleOptions } from "@/lib/prompt/agent/options-resolver";
 import { appendAnswer, selectionValueFor, buildRenderInputs } from "@/lib/prompt/agent/history";
 import { logAgent, getAgentLog } from "@/lib/prompt/agent/debug-log";
-import { routePrimaryType } from "@/lib/prompt/agent/routing";
+import { routePrimaryType, suggestedIdsFromDescription } from "@/lib/prompt/agent/routing";
 import type { Precision } from "@/lib/prompt/agent/gradient";
 import { computeFillSet } from "@/lib/prompt/agent/fill";
 
@@ -322,7 +322,17 @@ export function useAgentGuideController() {
           // `currentDimension` null → the UI sat forever on "AI 正在决定下一步"
           // (surfaced by the first real-human walkthrough of /agent-demo).
           setDecision(next);
-          setDraft([]);
+          // For the constraints question, pre-select anatomy-relevant defaults so the
+          // user can submit with one tap rather than having to hunt for the option.
+          const constraintsDefaults: Record<string, string[]> = {
+            "动物": ["image_constraints:no_bad_anatomy"],
+            "人像": ["image_constraints:no_bad_anatomy"],
+          };
+          const defaultConstraints =
+            next.nextQuestionId === "constraints"
+              ? (constraintsDefaults[routePrimaryType(descriptionRef.current)] ?? [])
+              : [];
+          setDraft(defaultConstraints);
           setDraftText("");
           setPhase("asking");
         }
@@ -407,10 +417,16 @@ export function useAgentGuideController() {
   }, [decision, currentDimension, selections]);
 
   // Options recommended by the audit associations given prior picks ("推荐" badge).
-  const suggestedIds = useMemo(
-    () => suggestedIdsFor(selectedOptionIds(selections)),
-    [selections]
-  );
+  // On the subject question (first turn), also derive suggestions from the description
+  // text so pet animals / wildlife get a badge even before any selection is made.
+  const suggestedIds = useMemo(() => {
+    const fromSelections = suggestedIdsFor(selectedOptionIds(selections));
+    if (decision?.nextQuestionId === "subject") {
+      const fromDesc = suggestedIdsFromDescription(description, primaryType);
+      if (fromDesc.size > 0) return new Set([...fromSelections, ...fromDesc]);
+    }
+    return fromSelections;
+  }, [selections, decision, description, primaryType]);
 
   // Log what's actually shown for each decision, incl. options the hard-conflict
   // filter removed — pinpoints "no options shown" without guessing.

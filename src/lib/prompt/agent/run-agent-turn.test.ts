@@ -148,6 +148,49 @@ describe("runAgentTurn (C-9b gradient)", () => {
     expect(diagnostics.fallbackUsed).toBe(true);
     expect(diagnostics.source).toBe("fallback");
   });
+
+  // ⑥ P0-A: subject pre-filter — model only receives category-matched options
+  it("⑥ 动物 subject turn: options JSON contains only pet_animal + wildlife", async () => {
+    let capturedOptions: string[] = [];
+    const transport = async (req: unknown) => {
+      const body = (req as { body: Record<string, unknown> }).body;
+      const messages = body.messages as Array<{ role: string; content: string }>;
+      const systemText = messages.find(m => m.role === "system")?.content ?? "";
+      // Extract only the JSON options list after "可选选项：\n"
+      const match = systemText.match(/可选选项：\n(\[[\s\S]*?\](?=\n|$))/);
+      if (match) {
+        const opts = JSON.parse(match[1]) as Array<{ id: string }>;
+        capturedOptions = opts.map(o => o.id);
+      }
+      return makeResp(["image_subject:pet_animal"]);
+    };
+
+    await runAgentTurn(
+      provider, "test-key",
+      { manifest, history: [], userDescription: "橘色小猫" },
+      transport
+    );
+
+    expect(capturedOptions).toContain("image_subject:pet_animal");
+    expect(capturedOptions).toContain("image_subject:wildlife");
+    expect(capturedOptions).not.toContain("image_subject:food_beverage");
+    expect(capturedOptions).not.toContain("image_subject:single_person");
+    expect(capturedOptions.length).toBe(2); // only the 2 animal options
+  });
+
+  // ⑦ P0-A fallback: invalid options → falls back to filtered set, not full catalog
+  it("⑦ 动物 subject fallback uses filtered options, not full catalog", async () => {
+    const { decision } = await runAgentTurn(
+      provider, "test-key",
+      { manifest, history: [], userDescription: "橘色小猫" },
+      async () => makeResp(["image_fake:nonexistent"])
+    );
+
+    expect(decision.visibleOptionIds).toContain("image_subject:pet_animal");
+    expect(decision.visibleOptionIds).toContain("image_subject:wildlife");
+    expect(decision.visibleOptionIds).not.toContain("image_subject:food_beverage");
+    expect(decision.visibleOptionIds).not.toContain("image_subject:single_person");
+  });
 });
 
 describe("parseTurnResponse (C-9b)", () => {

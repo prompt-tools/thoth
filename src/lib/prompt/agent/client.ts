@@ -1,4 +1,5 @@
 import type { CatalogManifest } from "./catalog-manifest";
+import { getTypeFilteredSubjectOptionIds } from "./catalog-manifest";
 import {
   type AgentDecision,
   type AgentHistoryItem,
@@ -238,10 +239,25 @@ export function buildTurnRequest(
     tier: "detail", // legacy, always "detail" now
     type,
     precision,
+    // Populated below after optionsForModel is computed; placeholder until then.
+    filteredCurrentOptionIds: [],
   };
 
-  // Tool only asks for visibleOptionIds + helperText for the current dimension
+  // Pre-filter subject options by primary type so the model only sees relevant
+  // categories (e.g., for "动物" only pet_animal + wildlife, never food_beverage).
   const currentDim = pool[0];
+  let optionsForModel = currentDim?.options ?? [];
+  if (currentQid === "subject" && type !== "通用") {
+    const allowed = getTypeFilteredSubjectOptionIds(type);
+    if (allowed) {
+      const filtered = optionsForModel.filter(o => allowed.has(o.id));
+      if (filtered.length > 0) optionsForModel = filtered;
+    }
+  }
+  // Back-fill ctx with the (possibly filtered) option id set.
+  // parseTurnResponse uses this for fallback so out-of-category ids never appear.
+  ctx.filteredCurrentOptionIds = optionsForModel.map(o => o.id);
+
   const toolParameters = {
     type: "object",
     properties: {
@@ -259,7 +275,7 @@ export function buildTurnRequest(
     additionalProperties: false,
   };
 
-  const systemText = `${AGENT_SYSTEM_PROMPT}${buildAgentGuidance()}\n\n当前维度：${currentQid}（${currentDim?.title ?? ""}）\n可选选项：\n${JSON.stringify(currentDim?.options ?? [])}`;
+  const systemText = `${AGENT_SYSTEM_PROMPT}${buildAgentGuidance()}\n\n当前维度：${currentQid}（${currentDim?.title ?? ""}）\n可选选项：\n${JSON.stringify(optionsForModel)}`;
 
   const proxyReq = buildToolRequest(provider, apiKey, {
     model: provider.routingModel,
@@ -308,11 +324,15 @@ export function parseTurnResponse(
     (id): id is string => typeof id === "string" && !validIds.has(id)
   );
 
-  // Fallback: if model returned no valid options, use ALL options for this dimension
+  // Fallback: if model returned no valid options, use the pre-filtered option set
+  // (ctx.filteredCurrentOptionIds) so out-of-category options never appear.
+  // Note: validIds (from optionIdsByQuestion) is still used for ID validation above.
   const visibleOptionIds =
     validOptionIds.length > 0
       ? validOptionIds
-      : [...validIds];
+      : ctx.filteredCurrentOptionIds.length > 0
+        ? ctx.filteredCurrentOptionIds
+        : [...validIds];
 
   // Extract helperText from model response
   const helperText = typeof (rawInput as { helperText?: unknown })?.helperText === "string"
@@ -342,6 +362,10 @@ export interface TurnContext {
   tier: "overall" | "detail";
   type: string;
   precision: Precision;
+  /** Option ids sent to the model for the current dimension (may be pre-filtered
+   *  by primary type for the subject question). Used as the fallback set in
+   *  parseTurnResponse so the fallback never shows out-of-category options. */
+  filteredCurrentOptionIds: string[];
 }
 
 // ── public API ─────────────────────────────────────────────────────────────
@@ -392,11 +416,15 @@ export async function runAgentTurn(
       break;
     } catch {
       if (t === maxRetries) {
-        // All retries exhausted → fallback: use ALL options for current dimension
+        // All retries exhausted → fallback: use the pre-filtered option set
+        // (respects category pre-filtering; avoids showing out-of-category options)
         const currentDim = ctx.pool[0];
+        const fallbackIds = ctx.filteredCurrentOptionIds.length > 0
+          ? ctx.filteredCurrentOptionIds
+          : currentDim.options.map((o) => o.id);
         const fallbackDecision: AgentDecision = {
           nextQuestionId: ctx.currentQuestionId,
-          visibleOptionIds: currentDim.options.map((o) => o.id),
+          visibleOptionIds: fallbackIds,
           done: false,
         };
         return {

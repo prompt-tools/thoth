@@ -95,6 +95,16 @@ describe("activeDimensions", () => {
     }
   });
 
+  // ★ 动物 constraints ordering: constraints must appear before aspect_ratio
+  it("动物 simple: constraints appears before aspect_ratio", () => {
+    const { ordered } = activeDimensions("动物", "simple", []);
+    const idxConstraints = ordered.indexOf("constraints");
+    const idxAspect = ordered.indexOf("aspect_ratio");
+    expect(idxConstraints).toBeGreaterThan(-1);
+    expect(idxAspect).toBeGreaterThan(-1);
+    expect(idxConstraints).toBeLessThan(idxAspect);
+  });
+
   // 通用 type works
   it("通用 fallback type returns valid dimensions", () => {
     const { ordered, done } = activeDimensions("通用", "simple", []);

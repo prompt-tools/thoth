@@ -48,3 +48,33 @@ function getGradientIndex(type: string): number {
   const idx = GRADIENT.primaryTypes.findIndex((p) => p.type === type);
   return idx >= 0 ? idx : Infinity;
 }
+
+// ── Description-aware subject suggestions ────────────────────────────────
+
+/** Signal words that imply a domestic pet → suggest image_subject:pet_animal. */
+const ANIMAL_PET_SIGNALS = ["猫", "狗", "宠物", "兔", "仓鼠", "cat", "dog", "pet", "rabbit", "hamster"];
+
+/** Signal words that imply a wild animal → suggest image_subject:wildlife. */
+const ANIMAL_WILD_SIGNALS = ["野生", "狮", "虎", "狼", "熊", "lion", "tiger", "wolf", "bear", "safari"];
+
+/**
+ * Derive suggested subject option ids from the user's free-text description and
+ * the already-routed primary type. Used to show "推荐" badges on the subject
+ * question before any selections exist (so suggestedIdsFor() would return ∅).
+ *
+ * Returns an empty Set when no strong signal is found — never forces a suggestion.
+ */
+export function suggestedIdsFromDescription(description: string, type: string): Set<string> {
+  const lower = description.toLowerCase();
+  if (type === "动物") {
+    if (ANIMAL_PET_SIGNALS.some(s => lower.includes(s.toLowerCase()))) {
+      return new Set(["image_subject:pet_animal"]);
+    }
+    if (ANIMAL_WILD_SIGNALS.some(s => lower.includes(s.toLowerCase()))) {
+      return new Set(["image_subject:wildlife"]);
+    }
+  }
+  // For other routed types the subject category has ≤4 options after pre-filtering,
+  // so a forced suggestion adds little value and risks being wrong.
+  return new Set();
+}
