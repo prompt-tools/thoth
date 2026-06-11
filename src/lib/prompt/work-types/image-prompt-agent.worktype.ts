@@ -58,7 +58,11 @@ const phaseBQuestions: QuestionSchema[] = [
     mode: "single",
     level: "advanced",
     required: false,
-    optionSetId: "image_pose"
+    optionSetId: "image_pose",
+    scopeToOption: [
+      "image_subject:single_person", "image_subject:group_portrait",
+      "image_subject:character_design", "image_subject:silhouette_figure"
+    ]
   },
   {
     id: "outfit",
@@ -68,7 +72,11 @@ const phaseBQuestions: QuestionSchema[] = [
     mode: "multi",
     level: "advanced",
     required: false,
-    optionSetId: "image_outfit"
+    optionSetId: "image_outfit",
+    scopeToOption: [
+      "image_subject:single_person", "image_subject:group_portrait",
+      "image_subject:character_design"
+    ]
   },
   {
     id: "hair",
@@ -78,7 +86,11 @@ const phaseBQuestions: QuestionSchema[] = [
     mode: "single",
     level: "advanced",
     required: false,
-    optionSetId: "image_hair"
+    optionSetId: "image_hair",
+    scopeToOption: [
+      "image_subject:single_person", "image_subject:group_portrait",
+      "image_subject:character_design"
+    ]
   },
   {
     id: "product_material",
@@ -99,6 +111,108 @@ const phaseBQuestions: QuestionSchema[] = [
     level: "advanced",
     required: false,
     optionSetId: "image_weather"
+  },
+  // P4: animal attribute dims — scoped to pet_animal / wildlife via gradient
+  {
+    id: "animal_breed",
+    version: "0.1.0",
+    title: { zh: "品种", en: "Breed" },
+    helper: { zh: "宠物或动物的具体品种。", en: "The specific breed of the pet or animal." },
+    mode: "single",
+    level: "core",
+    required: false,
+    optionSetId: "image_animal_breed",
+    scopeToOption: ["image_subject:pet_animal", "image_subject:wildlife"]
+  },
+  {
+    id: "animal_coat",
+    version: "0.1.0",
+    title: { zh: "毛色/花纹", en: "Coat color / pattern" },
+    helper: { zh: "动物的被毛颜色与花纹类型。", en: "The coat color and pattern of the animal." },
+    mode: "single",
+    level: "core",
+    required: false,
+    optionSetId: "image_animal_coat",
+    scopeToOption: ["image_subject:pet_animal", "image_subject:wildlife"]
+  },
+  {
+    id: "animal_pose",
+    version: "0.1.0",
+    title: { zh: "姿态/动作", en: "Pose / action" },
+    helper: { zh: "动物的姿势或动作状态。", en: "The posture or action state of the animal." },
+    mode: "single",
+    level: "advanced",
+    required: false,
+    optionSetId: "image_animal_pose",
+    scopeToOption: ["image_subject:pet_animal", "image_subject:wildlife"]
+  },
+  {
+    id: "animal_expression",
+    version: "0.1.0",
+    title: { zh: "表情/神态", en: "Expression / gaze" },
+    helper: { zh: "动物面部的神情和视线方向（近景时有效）。", en: "Facial expression and gaze direction (effective in close-up framing)." },
+    mode: "single",
+    level: "advanced",
+    required: false,
+    optionSetId: "image_animal_expression",
+    scopeToOption: ["image_subject:pet_animal"]
+  },
+  // P5: architecture attribute dims — scoped to architectural_exterior / interior_space
+  {
+    id: "arch_style",
+    version: "0.1.0",
+    title: { zh: "建筑风格", en: "Architectural style" },
+    helper: { zh: "建筑的历史或当代风格流派。", en: "The historical or contemporary style of the architecture." },
+    mode: "single",
+    level: "core",
+    required: false,
+    optionSetId: "image_arch_style",
+    scopeToOption: ["image_subject:architectural_exterior", "image_subject:interior_space"]
+  },
+  {
+    id: "arch_type",
+    version: "0.1.0",
+    title: { zh: "建筑类型", en: "Building type" },
+    helper: { zh: "建筑的功能类型或用途。", en: "The functional type or purpose of the building." },
+    mode: "single",
+    level: "core",
+    required: false,
+    optionSetId: "image_arch_type",
+    scopeToOption: ["image_subject:architectural_exterior", "image_subject:interior_space"]
+  },
+  {
+    id: "arch_material",
+    version: "0.1.0",
+    title: { zh: "建筑材质", en: "Building material" },
+    helper: { zh: "建筑主要外立面或结构材料。", en: "The primary facade or structural material of the building." },
+    mode: "single",
+    level: "core",
+    required: false,
+    optionSetId: "image_arch_material",
+    scopeToOption: ["image_subject:architectural_exterior", "image_subject:interior_space"]
+  },
+  {
+    id: "arch_viewpoint",
+    version: "0.1.0",
+    title: { zh: "建筑视角", en: "Architectural viewpoint" },
+    helper: { zh: "拍摄或呈现建筑的角度与构图方式。", en: "The angle and compositional approach for capturing or presenting the building." },
+    mode: "single",
+    level: "advanced",
+    required: false,
+    optionSetId: "image_arch_viewpoint",
+    scopeToOption: ["image_subject:architectural_exterior", "image_subject:interior_space"]
+  },
+  // P6: portrait expression — scoped to single_person / character_design
+  {
+    id: "portrait_expression",
+    version: "0.1.0",
+    title: { zh: "人物表情", en: "Portrait expression" },
+    helper: { zh: "人物面部的神情与气质（近景/半身时最有效）。", en: "Facial expression and presence of the person (most effective in close-up or medium framing)." },
+    mode: "single",
+    level: "core",
+    required: false,
+    optionSetId: "image_portrait_expression",
+    scopeToOption: ["image_subject:single_person", "image_subject:character_design"]
   }
 ];
 

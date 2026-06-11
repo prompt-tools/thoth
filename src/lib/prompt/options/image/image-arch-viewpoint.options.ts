@@ -1,0 +1,113 @@
+import type { OptionSet } from "../../types";
+
+export const imageArchViewpointOptions: OptionSet = {
+  id: "image_arch_viewpoint",
+  version: "0.1.0",
+  label: { zh: "建筑视角", en: "Architectural viewpoint" },
+  options: [
+    {
+      id: "image_arch_viewpoint:facade_wide",
+      version: "0.1.0",
+      label: { zh: "正立面广角", en: "Facade wide shot" },
+      plain: { zh: "正对建筑主立面的全景广角", en: "Full wide-angle view facing the main building facade" },
+      professionalTerms: ["facade elevation", "frontal view", "wide-angle architectural shot"],
+      promptFragment: {
+        zh: "建筑正立面广角全景，水平视线，完整呈现立面比例与细节，周边环境衬托建筑体量",
+        en: "wide-angle frontal facade shot at eye level, fully presenting facade proportions and details, surrounding context framing the building mass",
+      },
+      riskHint: { zh: "", en: "" },
+      appliesTo: ["generic_image"],
+    },
+    {
+      id: "image_arch_viewpoint:low_angle",
+      version: "0.1.0",
+      label: { zh: "仰视", en: "Low-angle upward" },
+      plain: { zh: "从低处向上仰拍建筑，强调高度与震撼感", en: "Looking up from ground level, emphasizing height and grandeur" },
+      professionalTerms: ["low-angle shot", "worm's eye view", "forced perspective"],
+      promptFragment: {
+        zh: "建筑仰视角度，极度压缩透视，立面向上汇聚消失，强调建筑高耸感和震撼尺度，天空为背景",
+        en: "looking up at the building with extreme convergent perspective, facade lines converging upward, emphasizing soaring height and awe-inspiring scale against the sky",
+      },
+      riskHint: { zh: "", en: "" },
+      appliesTo: ["generic_image"],
+    },
+    {
+      id: "image_arch_viewpoint:aerial",
+      version: "0.1.0",
+      label: { zh: "鸟瞰", en: "Aerial overhead" },
+      plain: { zh: "从高空俯瞰建筑及周边环境", en: "Overhead aerial view of the building and surrounding area" },
+      professionalTerms: ["aerial view", "bird's eye view", "drone photography", "overhead shot"],
+      promptFragment: {
+        zh: "建筑鸟瞰视角，从上方俯视整体形态与屋顶细节，周边街道与绿化布局一览无余，城市肌理清晰",
+        en: "aerial bird's eye view of the building, roof form and details visible from above, surrounding streets and greenery clearly laid out, urban grain in full view",
+      },
+      riskHint: { zh: "", en: "" },
+      appliesTo: ["generic_image"],
+    },
+    {
+      id: "image_arch_viewpoint:street_perspective",
+      version: "0.1.0",
+      label: { zh: "街道透视", en: "Street-level perspective" },
+      plain: { zh: "行人视角的街道斜侧透视，展现建筑与街道关系", en: "Pedestrian-level diagonal perspective showing building-street relationship" },
+      professionalTerms: ["street-level perspective", "three-quarter view", "diagonal perspective"],
+      promptFragment: {
+        zh: "街道行人视角斜侧透视，建筑角部立面汇聚消失，前景街道铺装与行人活动，建筑与城市的生动关系",
+        en: "pedestrian-level diagonal street perspective, building corner facade converging to a vanishing point, foreground street pavement and pedestrian activity — building and city in lively dialogue",
+      },
+      riskHint: { zh: "", en: "" },
+      appliesTo: ["generic_image"],
+    },
+    {
+      id: "image_arch_viewpoint:detail_closeup",
+      version: "0.1.0",
+      label: { zh: "建筑细节特写", en: "Architectural detail close-up" },
+      plain: { zh: "建筑局部装饰、节点或材质的特写", en: "Close-up of architectural ornament, structural joint, or material texture" },
+      professionalTerms: ["architectural detail", "material texture close-up", "ornamental detail", "joint detail"],
+      promptFragment: {
+        zh: "建筑细节特写，聚焦装饰雕刻、连接节点或材质肌理，微距展现工匠精神，光影强化质感层次",
+        en: "architectural detail close-up focused on decorative carving, structural joint, or material texture — macro view revealing craftsmanship, light and shadow enhancing textural depth",
+      },
+      riskHint: { zh: "", en: "" },
+      appliesTo: ["generic_image"],
+    },
+    {
+      id: "image_arch_viewpoint:interior_wide",
+      version: "0.1.0",
+      label: { zh: "室内广角", en: "Interior wide shot" },
+      plain: { zh: "室内空间全景广角，展现空间进深和氛围", en: "Interior panoramic wide shot showing spatial depth and atmosphere" },
+      professionalTerms: ["interior wide angle", "architectural interior photography", "space perception"],
+      promptFragment: {
+        zh: "室内广角全景，天花与地面汇聚透视强调进深，自然光从侧窗或天窗斜入，空间层次丰富细腻",
+        en: "interior wide-angle panorama with ceiling and floor lines converging to emphasize depth, natural light raking in from side windows or skylights, rich and nuanced spatial layering",
+      },
+      riskHint: { zh: "", en: "" },
+      appliesTo: ["generic_image"],
+    },
+    {
+      id: "image_arch_viewpoint:corridor",
+      version: "0.1.0",
+      label: { zh: "走廊透视", en: "Corridor perspective" },
+      plain: { zh: "走廊、拱廊或回廊的纵深消失点透视", en: "Deep vanishing-point perspective through a corridor, arcade, or cloister" },
+      professionalTerms: ["corridor perspective", "vanishing point", "arcade", "cloister walk"],
+      promptFragment: {
+        zh: "走廊或拱廊纵深透视，重复拱门或柱列向远处汇聚，光线从尽端洒入，节奏感强，引人入胜",
+        en: "corridor or arcade receding perspective with repeated arches or columns converging into the distance, light flooding from the far end — strong rhythm, drawing the eye inward",
+      },
+      riskHint: { zh: "", en: "" },
+      appliesTo: ["generic_image"],
+    },
+    {
+      id: "image_arch_viewpoint:isometric",
+      version: "0.1.0",
+      label: { zh: "轴测图", en: "Axonometric / isometric" },
+      plain: { zh: "建筑三维轴测或等距投影视角", en: "Three-dimensional axonometric or isometric projection of the building" },
+      professionalTerms: ["axonometric projection", "isometric view", "architectural drawing"],
+      promptFragment: {
+        zh: "建筑轴测图视角，三个立面同时可见，比例精确，细节丰富，像精密的三维建筑图纸或模型照",
+        en: "axonometric or isometric architectural view with three facades simultaneously visible, precise proportions and rich detail — like a precise three-dimensional architectural drawing or model",
+      },
+      riskHint: { zh: "", en: "" },
+      appliesTo: ["generic_image"],
+    },
+  ],
+};

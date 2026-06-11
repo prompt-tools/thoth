@@ -8,13 +8,19 @@ const VALID_IDS = new Set([
   "constraints", "color_palette", "mood", "framing", "camera_angle",
   "aspect_ratio", "detail_level", "post_processing", "time_season",
   "camera", "pose", "outfit", "hair", "product_material", "weather",
+  // P4: animal attribute dims
+  "animal_breed", "animal_coat", "animal_pose", "animal_expression",
+  // P5: architecture attribute dims
+  "arch_style", "arch_type", "arch_material", "arch_viewpoint",
+  // P6: portrait expression
+  "portrait_expression",
 ]);
 
 const manifest = buildCatalogManifest();
 const dimOptions = new Map(manifest.map((d) => [d.questionId, new Set(d.options.map((o) => o.id))]));
 
 describe("gradient data integrity", () => {
-  it("all questionIds are in the 21 valid IDs", () => {
+  it("all questionIds are in the valid IDs set", () => {
     const violations: string[] = [];
     for (const tier of ["essential", "tertiary"] as const) {
       for (const item of GRADIENT.shared[tier]) {
@@ -55,6 +61,22 @@ describe("gradient data integrity", () => {
       expect(pt.essential.length).toBeGreaterThan(0);
       expect(pt.order.length).toBeGreaterThan(0);
     }
+  });
+
+  it("all scopeToOption values are real subject option ids", () => {
+    const subjectOpts = dimOptions.get("subject") ?? new Set<string>();
+    const violations: string[] = [];
+    for (const pt of GRADIENT.primaryTypes) {
+      for (const tier of ["essential", "secondary", "tertiary"] as const) {
+        for (const item of pt[tier]) {
+          for (const val of item.scopeToOption ?? []) {
+            if (!subjectOpts.has(val))
+              violations.push(`${pt.type}.${tier}/${item.questionId}: ${val}`);
+          }
+        }
+      }
+    }
+    expect(violations).toEqual([]);
   });
 
   it("通用 fallback type exists with CORE dimensions", () => {

@@ -47,6 +47,7 @@ export interface QuestionSchema {
   minSelections?: number;
   maxSelections?: number;
   placeholder?: LocalizedText;
+  scopeToOption?: string[];
 }
 
 export interface WorkTypeConfig {

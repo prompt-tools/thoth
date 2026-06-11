@@ -23,6 +23,15 @@ import { imageOutfitOptions } from "./image-outfit.options";
 import { imageHairOptions } from "./image-hair.options";
 import { imageProductMaterialOptions } from "./image-product-material.options";
 import { imageWeatherOptions } from "./image-weather.options";
+import { imageAnimalBreedOptions } from "./image-animal-breed.options";
+import { imageAnimalCoatOptions } from "./image-animal-coat.options";
+import { imageAnimalPoseOptions } from "./image-animal-pose.options";
+import { imageAnimalExpressionOptions } from "./image-animal-expression.options";
+import { imageArchStyleOptions } from "./image-arch-style.options";
+import { imageArchTypeOptions } from "./image-arch-type.options";
+import { imageArchMaterialOptions } from "./image-arch-material.options";
+import { imageArchViewpointOptions } from "./image-arch-viewpoint.options";
+import { imagePortraitExpressionOptions } from "./image-portrait-expression.options";
 
 const imageOptionSets = [
   imagePublishScenarioOptions,
@@ -48,6 +57,18 @@ const imageOptionSets = [
   imageHairOptions,
   imageProductMaterialOptions,
   imageWeatherOptions,
+  // P4: animal attribute dims (scoped to pet_animal / wildlife)
+  imageAnimalBreedOptions,
+  imageAnimalCoatOptions,
+  imageAnimalPoseOptions,
+  imageAnimalExpressionOptions,
+  // P5: architecture attribute dims (scoped to architectural_exterior / interior_space)
+  imageArchStyleOptions,
+  imageArchTypeOptions,
+  imageArchMaterialOptions,
+  imageArchViewpointOptions,
+  // P6: portrait expression (scoped to single_person / character_design)
+  imagePortraitExpressionOptions,
 ] satisfies OptionSet[];
 
 for (const set of imageOptionSets) {

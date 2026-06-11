@@ -55,7 +55,8 @@ describe("computeFillSet (A3)", () => {
     expect(fill.length).toBeGreaterThan(0);
     expect(fill.length).toBeLessThanOrEqual(4);
 
-    const essentialIds = ["subject", "framing", "scene", "lighting", "color_palette"];
+    // P2: lighting + color_palette demoted to secondary in 人像 branch
+    const essentialIds = ["subject", "framing", "scene"];
     for (const eid of essentialIds) {
       expect(fill).not.toContain(eid);
     }
@@ -98,7 +99,9 @@ describe("computeFillSet (A3)", () => {
   });
 
   it("returns empty when all secondary already asked", () => {
+    // P2: color_palette is now secondary in 产品/静物 (demoted from essential)
     const history: AgentHistoryItem[] = [
+      { questionId: "color_palette", selectedOptionIds: ["image_color_palette:neutral_tones"] },
       { questionId: "composition", selectedOptionIds: ["image_composition:centered"] },
       { questionId: "art_style", selectedOptionIds: ["image_art_style:photorealistic"] },
     ];

@@ -12,6 +12,8 @@ export interface GradientItem {
   rationale?: string;
   corpusFreq?: number | null;
   source: string;
+  /** See QuestionSchema.scopeToOption — gate this dim on a selected subject option. */
+  scopeToOption?: string[];
 }
 
 export interface PrecompiledCondition {
@@ -91,19 +93,30 @@ export const GRADIENT: GradientData = {
           "source": "audit:always"
         },
         {
-          "questionId": "lighting",
-          "rationale": "光线对人像质感影响极大",
-          "corpusFreq": 580,
-          "source": "audit:always"
-        },
-        {
-          "questionId": "color_palette",
-          "rationale": "维护者要求色调早问；现版每次都问",
-          "corpusFreq": 103,
-          "source": "maintainer-override"
+          // P6: portrait expression scoped to single_person / character_design
+          "questionId": "portrait_expression",
+          "rationale": "P6 人物表情；仅在单人/角色设计主体时激活，近景最有效",
+          "corpusFreq": null,
+          "source": "redesign:P6:portrait-expression",
+          "scopeToOption": [
+            "image_subject:single_person",
+            "image_subject:character_design"
+          ]
         }
       ],
       "secondary": [
+        {
+          "questionId": "lighting",
+          "rationale": "光线对人像质感影响大，但人像分支降级/pro 档（doc §3.3）",
+          "corpusFreq": 580,
+          "source": "redesign:P2:lighting-demote"
+        },
+        {
+          "questionId": "color_palette",
+          "rationale": "色调降级为 secondary（owner decision 3，去除 maintainer-override pin）",
+          "corpusFreq": 103,
+          "source": "redesign:P2:color-demote"
+        },
         {
           "questionId": "camera",
           "rationale": "镜头焦段决定透视/景深，audit 人像 always",
@@ -126,19 +139,31 @@ export const GRADIENT: GradientData = {
           "questionId": "pose",
           "rationale": "姿态/动作；audit 人像 always 但 framing=close_up 时 suppress",
           "corpusFreq": 133,
-          "source": "audit:always"
+          "source": "audit:always",
+          "scopeToOption": [
+            "image_subject:single_person", "image_subject:group_portrait",
+            "image_subject:character_design", "image_subject:silhouette_figure"
+          ]
         },
         {
           "questionId": "outfit",
           "rationale": "着装/造型；framing=close_up 时 suppress",
           "corpusFreq": 187,
-          "source": "audit:always"
+          "source": "audit:always",
+          "scopeToOption": [
+            "image_subject:single_person", "image_subject:group_portrait",
+            "image_subject:character_design"
+          ]
         },
         {
           "questionId": "hair",
           "rationale": "发型；特写/半身时有意义",
           "corpusFreq": 50,
-          "source": "audit:always"
+          "source": "audit:always",
+          "scopeToOption": [
+            "image_subject:single_person", "image_subject:group_portrait",
+            "image_subject:character_design"
+          ]
         }
       ],
       "tertiary": [
@@ -194,6 +219,7 @@ export const GRADIENT: GradientData = {
       "order": [
         "subject",
         "framing",
+        "portrait_expression",
         "scene",
         "lighting",
         "camera",
@@ -235,18 +261,18 @@ export const GRADIENT: GradientData = {
         },
         {
           "questionId": "lighting",
-          "rationale": "光线影响产品质感呈现",
+          "rationale": "光线影响产品质感呈现（产品分支 lighting=essential，doc §3.3）",
           "corpusFreq": 580,
           "source": "audit:always"
-        },
-        {
-          "questionId": "color_palette",
-          "rationale": "维护者要求色调早问",
-          "corpusFreq": 103,
-          "source": "maintainer-override"
         }
       ],
       "secondary": [
+        {
+          "questionId": "color_palette",
+          "rationale": "色调降级为 secondary（owner decision 3；产品 color-lock 风险见 watch-note）",
+          "corpusFreq": 103,
+          "source": "redesign:P2:color-demote"
+        },
         {
           "questionId": "composition",
           "rationale": "构图对产品摆放很重要；audit precision>=medium",
@@ -319,6 +345,47 @@ export const GRADIENT: GradientData = {
           "rationale": "光线",
           "corpusFreq": 580,
           "source": "audit:always"
+        },
+        {
+          "questionId": "camera_angle",
+          "rationale": "P3 风景视角/机位（航拍/俯视/等距）；仅在风景主体时激活",
+          "corpusFreq": null,
+          "source": "redesign:P3:landscape-vantage",
+          "scopeToOption": [
+            "image_subject:natural_landscape",
+            "image_subject:cityscape",
+            "image_subject:skyscape"
+          ]
+        },
+        {
+          "questionId": "arch_style",
+          "rationale": "P5 建筑风格（哥特/现代主义/巴洛克等）；仅在建筑主体时激活",
+          "corpusFreq": null,
+          "source": "redesign:P5:arch-style",
+          "scopeToOption": [
+            "image_subject:architectural_exterior",
+            "image_subject:interior_space"
+          ]
+        },
+        {
+          "questionId": "arch_type",
+          "rationale": "P5 建筑类型（大教堂/摩天楼/博物馆等）；仅在建筑主体时激活",
+          "corpusFreq": null,
+          "source": "redesign:P5:arch-type",
+          "scopeToOption": [
+            "image_subject:architectural_exterior",
+            "image_subject:interior_space"
+          ]
+        },
+        {
+          "questionId": "arch_material",
+          "rationale": "P5 建筑材质（石材/玻璃/混凝土等）；仅在建筑主体时激活",
+          "corpusFreq": null,
+          "source": "redesign:P5:arch-material",
+          "scopeToOption": [
+            "image_subject:architectural_exterior",
+            "image_subject:interior_space"
+          ]
         }
       ],
       "secondary": [
@@ -345,6 +412,16 @@ export const GRADIENT: GradientData = {
           "rationale": "构图",
           "corpusFreq": 248,
           "source": "audit:precision>=medium"
+        },
+        {
+          "questionId": "arch_viewpoint",
+          "rationale": "P5 建筑视角（仰视/鸟瞰/室内等）；仅在建筑主体时激活",
+          "corpusFreq": null,
+          "source": "redesign:P5:arch-viewpoint",
+          "scopeToOption": [
+            "image_subject:architectural_exterior",
+            "image_subject:interior_space"
+          ]
         }
       ],
       "tertiary": [
@@ -355,13 +432,34 @@ export const GRADIENT: GradientData = {
           "source": "audit:precision=high"
         }
       ],
-      "conditional": [],
+      "conditional": [
+        {
+          "questionId": "scene",
+          "condition": {
+            "dimension": "subject",
+            "op": "in",
+            "values": [
+              "image_subject:natural_landscape",
+              "image_subject:cityscape",
+              "image_subject:skyscape"
+            ]
+          },
+          "minPrecision": "any",
+          "tierWhenActive": "suppress",
+          "source": "redesign:P3:subject-scene-dedup"
+        }
+      ],
       "order": [
         "subject",
+        "arch_style",
+        "arch_type",
+        "arch_material",
         "scene",
         "time_season",
         "weather",
         "camera",
+        "camera_angle",
+        "arch_viewpoint",
         "lighting",
         "mood",
         "color_palette",
@@ -391,16 +489,46 @@ export const GRADIENT: GradientData = {
           "corpusFreq": 860,
           "source": "audit:always"
         },
+        // P4: breed + coat are the core differentiators — scoped to pet/wildlife
         {
-          "questionId": "lighting",
-          "rationale": "光线",
-          "corpusFreq": 580,
-          "source": "audit:always"
+          "questionId": "animal_breed",
+          "rationale": "P4:品种是主体特化核心(宠物/野生动物)",
+          "corpusFreq": null,
+          "source": "redesign:P4",
+          "scopeToOption": ["image_subject:pet_animal", "image_subject:wildlife"]
+        },
+        {
+          "questionId": "animal_coat",
+          "rationale": "P4:毛色/花纹，配合品种定义主体外观",
+          "corpusFreq": null,
+          "source": "redesign:P4",
+          "scopeToOption": ["image_subject:pet_animal", "image_subject:wildlife"]
         }
         // constraints removed from essential — lives in shared.essential (dedup).
         // Ordering is controlled via the order array below.
       ],
       "secondary": [
+        // P4: pose + expression scoped to pet/wildlife; expression activates at close-up
+        {
+          "questionId": "animal_pose",
+          "rationale": "P4:姿态/动作，宠物/野生动物专属",
+          "corpusFreq": null,
+          "source": "redesign:P4",
+          "scopeToOption": ["image_subject:pet_animal", "image_subject:wildlife"]
+        },
+        {
+          "questionId": "animal_expression",
+          "rationale": "P4:表情/神态，仅宠物(近景有效)",
+          "corpusFreq": null,
+          "source": "redesign:P4",
+          "scopeToOption": ["image_subject:pet_animal"]
+        },
+        {
+          "questionId": "lighting",
+          "rationale": "光线（宠物/动物分支降级/pro 档，doc §3.3）",
+          "corpusFreq": 580,
+          "source": "redesign:P2:lighting-demote"
+        },
         {
           "questionId": "art_style",
           "rationale": "画风；audit precision>=medium",
@@ -437,7 +565,11 @@ export const GRADIENT: GradientData = {
       "conditional": [],
       "order": [
         "subject",
+        "animal_breed",
+        "animal_coat",
         "framing",
+        "animal_pose",
+        "animal_expression",
         "scene",
         "lighting",
         "constraints",
@@ -475,14 +607,14 @@ export const GRADIENT: GradientData = {
           "corpusFreq": 580,
           "source": "audit:always"
         },
-        {
-          "questionId": "color_palette",
-          "rationale": "食物色调/摆盘色彩极其重要；maintainer-override",
-          "corpusFreq": 103,
-          "source": "maintainer-override"
-        }
       ],
       "secondary": [
+        {
+          "questionId": "color_palette",
+          "rationale": "色调降级为 secondary（owner decision 3，去除 maintainer-override pin）",
+          "corpusFreq": 103,
+          "source": "redesign:P2:color-demote"
+        },
         {
           "questionId": "art_style",
           "rationale": "画风；audit precision>=medium",
