@@ -1,32 +1,107 @@
 import { genericImageTarget } from "../targets/generic-image.target";
 import { assemblePrompt, getBriefText, warningFromBrief } from "../brief";
-import type { NegativePromptTier, PromptBrief, RenderedPrompt, TargetAdapter, TemplateTargetConfig } from "../types";
+import { GRADIENT, type GradientData } from "../agent/gradient";
+import type {
+  BriefItem,
+  NegativePromptTier,
+  PromptBrief,
+  RenderedPrompt,
+  TargetAdapter,
+  TemplateTargetConfig
+} from "../types";
 
-function render(brief: PromptBrief, negPromptTier?: NegativePromptTier): RenderedPrompt {
+export function buildSubjectScopedIndex(gradient: GradientData): Map<string, Set<string>> {
+  const index = new Map<string, Set<string>>();
+  for (const primaryType of gradient.primaryTypes) {
+    for (const tier of [primaryType.essential, primaryType.secondary, primaryType.tertiary]) {
+      for (const item of tier) {
+        if (!item.scopeToOption?.length) continue;
+        const ids = index.get(item.questionId) ?? new Set<string>();
+        for (const id of item.scopeToOption) ids.add(id);
+        index.set(item.questionId, ids);
+      }
+    }
+  }
+  return index;
+}
+
+const DEFAULT_SCOPED_INDEX = buildSubjectScopedIndex(GRADIENT);
+
+function identifyScopedDims(
+  brief: PromptBrief,
+  tpl: TemplateTargetConfig["templateMap"],
+  scopedIndex: Map<string, Set<string>>
+): Set<string> {
+  const scoped = new Set<string>();
+  const subjectItem = brief.items.find((item) => item.questionId === "subject");
+  if (!subjectItem) return scoped;
+  const selectedSubjectIds = new Set(subjectItem.selectedOptions.map((o) => o.id));
+  for (const item of brief.items) {
+    if (tpl[item.questionId]) continue;
+    const activators = scopedIndex.get(item.questionId);
+    if (!activators) continue;
+    for (const id of activators) {
+      if (selectedSubjectIds.has(id)) {
+        scoped.add(item.questionId);
+        break;
+      }
+    }
+  }
+  return scoped;
+}
+
+function optionText(item: BriefItem, locale: "zh" | "en"): string {
+  const sep = locale === "zh" ? "，" : ", ";
+  return (
+    item.freeText ??
+    item.selectedOptions.map((o) => o.promptFragment[locale]).join(sep)
+  );
+}
+
+function assembleSubjectPhrase(
+  brief: PromptBrief,
+  subjectPart: string,
+  scopedDims: Set<string>,
+  locale: "zh" | "en"
+): string {
+  const sep = locale === "zh" ? "，" : ", ";
+  const fragments = [subjectPart];
+  for (const item of brief.items) {
+    if (!scopedDims.has(item.questionId)) continue;
+    const text = optionText(item, locale);
+    if (text) fragments.push(text);
+  }
+  return fragments.join(sep);
+}
+
+function render(
+  brief: PromptBrief,
+  negPromptTier?: NegativePromptTier,
+  scopedIndex: Map<string, Set<string>> = DEFAULT_SCOPED_INDEX
+): RenderedPrompt {
   const tpl = genericImageTarget.templateMap;
   const parts = assemblePrompt(brief, tpl, "zh");
   const partsEn = assemblePrompt(brief, tpl, "en");
 
-  // Collect non-empty parts and join with locale-appropriate separator.
-  // Chinese: full-width comma "，"  /  English: comma + space ", "
-  // Filter out undefined/empty values so no dangling separators.
+  const scopedDims = identifyScopedDims(brief, tpl, scopedIndex);
+  const useAssembly = scopedDims.size > 0 && !!parts.subject;
 
   const zhPhrases: string[] = [];
   const enPhrases: string[] = [];
 
-  // Iterate templateMap keys to maintain consistent order
-  // between zh and en output (templateMap keys define the dimension order)
+  if (useAssembly) {
+    if (parts.subject) zhPhrases.push(assembleSubjectPhrase(brief, parts.subject, scopedDims, "zh"));
+    if (partsEn.subject) enPhrases.push(assembleSubjectPhrase(brief, partsEn.subject, scopedDims, "en"));
+  }
+
   for (const key of Object.keys(tpl)) {
+    if (key === "subject" && useAssembly) continue;
     const zhPart = parts[key];
     const enPart = partsEn[key];
     if (zhPart) zhPhrases.push(zhPart);
     if (enPart) enPhrases.push(enPart);
   }
 
-  // Dedupe repeated fragments ACROSS dimensions (e.g. "浅景深" emitted by camera +
-  // framing + aperture). The judge penalised this redundancy and it hurt the wizard
-  // vs the bare seed (docs/research/autofill-seed-blind-2026-06-03.md). Split each
-  // dimension phrase into its comma-joined fragments, keep first occurrence, re-join.
   const dedupeFragments = (phrases: string[], sep: string): string[] => {
     const seen = new Set<string>();
     const kept: string[] = [];
@@ -44,12 +119,9 @@ function render(brief: PromptBrief, negPromptTier?: NegativePromptTier): Rendere
   const zhKept = dedupeFragments(zhPhrases, "，");
   const enKept = dedupeFragments(enPhrases, ", ");
 
-  // Prepend intent from rawIntent or use_case as a leading phrase
   const zhIntent = brief.rawIntent || getBriefText(brief, "use_case", "zh");
   const enIntent = brief.rawIntent || getBriefText(brief, "use_case", "en");
 
-  // Inject negative prompt (default tier: medium) AFTER dedupe so its internal list
-  // is never split/merged with dimension fragments.
   const negConfig = genericImageTarget.negativePrompt;
   if (negConfig) {
     const tier = negPromptTier || negConfig.default;
@@ -59,7 +131,6 @@ function render(brief: PromptBrief, negPromptTier?: NegativePromptTier): Rendere
     if (negEn) enKept.push(negEn);
   }
 
-  // Build final prompts: intent (if available) followed by comma-separated dimension phrases
   const zhPrompt = (zhIntent ? zhIntent + "，" : "") + zhKept.join("，");
   const enPrompt = (enIntent ? enIntent + ", " : "") + enKept.join(", ");
 
@@ -74,10 +145,8 @@ function render(brief: PromptBrief, negPromptTier?: NegativePromptTier): Rendere
   };
 }
 
-// I-02: self-registration removed. The adapter is resolved as a singleton
-// from registry/adapter.registry.ts (which imports `genericImageAdapter`
-// directly). This avoids a side-effect import dependency and lets us delete
-// the Map-based adapter registry without losing any behavior.
+export const renderGenericImage = render;
+
 export const genericImageAdapter: TargetAdapter<TemplateTargetConfig> = {
   target: genericImageTarget,
   render

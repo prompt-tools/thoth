@@ -39,9 +39,6 @@ export const genericImageTarget: TemplateTargetConfig = {
     constraints:     { zh: "{选项}", en: "{选项}" },
     time_season:     { zh: "{选项}", en: "{选项}" },
     camera:          { zh: "{选项}", en: "{选项}" },
-    pose:            { zh: "{选项}", en: "{选项}" },
-    outfit:          { zh: "{选项}", en: "{选项}" },
-    hair:            { zh: "{选项}", en: "{选项}" },
     product_material:{ zh: "{选项}", en: "{选项}" },
     weather:         { zh: "{选项}", en: "{选项}" }
   },

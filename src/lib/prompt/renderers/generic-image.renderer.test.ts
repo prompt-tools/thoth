@@ -2,6 +2,108 @@ import { describe, expect, it } from "vitest";
 import "../init"; // registers adapters
 import { renderPrompt } from "../adapters";
 import { resolveWorkType } from "../registry";
+import { renderGenericImage } from "./generic-image.renderer";
+import type { LocalizedText, OptionItem, PromptBrief } from "../types";
+
+function makeOption(id: string, label: LocalizedText, fragment: LocalizedText): OptionItem {
+  return {
+    id,
+    version: "0.1.0",
+    label,
+    plain: fragment,
+    professionalTerms: [],
+    promptFragment: fragment,
+    appliesTo: ["generic_image"],
+  };
+}
+
+function makeBrief(items: PromptBrief["items"]): PromptBrief {
+  return {
+    version: "0.1.0",
+    workTypeId: "image_prompt",
+    targetToolId: "generic_image",
+    rawIntent: "",
+    items,
+  };
+}
+
+describe("P6 portrait renderer coupling: pose/outfit/hair fold into subject phrase", () => {
+  const personSubjectItem = {
+    questionId: "subject",
+    title: { zh: "主体", en: "Subject" },
+    selectedOptions: [
+      makeOption(
+        "image_subject:single_person",
+        { zh: "单人", en: "Single person" },
+        { zh: "单个主体人物", en: "a single person" }
+      ),
+    ],
+  };
+  const poseItem = {
+    questionId: "pose",
+    title: { zh: "姿势", en: "Pose" },
+    selectedOptions: [
+      makeOption(
+        "image_pose:standing",
+        { zh: "站立", en: "Standing" },
+        { zh: "站立全身姿势", en: "standing full-body pose" }
+      ),
+    ],
+  };
+  const outfitItem = {
+    questionId: "outfit",
+    title: { zh: "服装", en: "Outfit" },
+    selectedOptions: [
+      makeOption(
+        "image_outfit:casual",
+        { zh: "休闲", en: "Casual" },
+        { zh: "休闲轻便服装", en: "casual everyday outfit" }
+      ),
+    ],
+  };
+  const hairItem = {
+    questionId: "hair",
+    title: { zh: "发型", en: "Hair" },
+    selectedOptions: [
+      makeOption(
+        "image_hair:short",
+        { zh: "短发", en: "Short hair" },
+        { zh: "整洁短发", en: "neat short hair" }
+      ),
+    ],
+  };
+
+  it("portrait dims (pose + outfit + hair) are assembled into the leading subject phrase", () => {
+    const brief = makeBrief([personSubjectItem, poseItem, outfitItem, hairItem]);
+    const rendered = renderGenericImage(brief);
+    expect(rendered.zhPrompt).toContain("站立全身姿势");
+    expect(rendered.zhPrompt).toContain("休闲轻便服装");
+    expect(rendered.zhPrompt).toContain("整洁短发");
+    const negIdx = rendered.zhPrompt.indexOf("避免");
+    expect(rendered.zhPrompt.indexOf("站立全身姿势")).toBeLessThan(negIdx);
+    for (const frag of ["站立全身姿势", "休闲轻便服装", "整洁短发"]) {
+      expect(rendered.zhPrompt.indexOf(frag)).toBe(rendered.zhPrompt.lastIndexOf(frag));
+    }
+  });
+
+  it("portrait dims do NOT appear for a non-portrait subject (animal)", () => {
+    const animalSubjectItem = {
+      questionId: "subject",
+      title: { zh: "主体", en: "Subject" },
+      selectedOptions: [
+        makeOption(
+          "image_subject:pet_animal",
+          { zh: "宠物", en: "Pet" },
+          { zh: "一只可爱的宠物", en: "an adorable pet" }
+        ),
+      ],
+    };
+    const rendered = renderGenericImage(makeBrief([animalSubjectItem, poseItem, outfitItem, hairItem]));
+    expect(rendered.zhPrompt).not.toContain("站立全身姿势");
+    expect(rendered.zhPrompt).not.toContain("休闲轻便服装");
+    expect(rendered.zhPrompt).not.toContain("整洁短发");
+  });
+});
 
 describe("generic-image renderer snapshot", () => {
   it("emits non-empty zh and en prompts (comma-separated keywords)", () => {
