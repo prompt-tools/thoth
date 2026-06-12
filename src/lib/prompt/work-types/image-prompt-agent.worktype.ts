@@ -213,7 +213,38 @@ const phaseBQuestions: QuestionSchema[] = [
     required: false,
     optionSetId: "image_portrait_expression",
     scopeToOption: ["image_subject:single_person", "image_subject:character_design"]
-  }
+  },
+  // P7: food-scoped dims — scoped to food_beverage / plated_dish / dessert_beverage
+  {
+    id: "food_state",
+    version: "0.1.0",
+    title: { zh: "食物状态", en: "Food state" },
+    helper: { zh: "食物表面视觉属性与热度信号：酥脆、光泽、融化、蒸汽、多汁等。", en: "Food surface visual properties and freshness/heat signals: crispy, glossy, melting, steaming, juicy, etc." },
+    mode: "single",
+    level: "advanced",
+    required: false,
+    optionSetId: "image_food_state",
+    scopeToOption: [
+      "image_subject:food_beverage",
+      "image_subject:plated_dish",
+      "image_subject:dessert_beverage",
+    ],
+  },
+  {
+    id: "food_tableware_styling",
+    version: "0.1.0",
+    title: { zh: "食器/摆盘", en: "Tableware / plating surface" },
+    helper: { zh: "盘子、木板、玻璃杯和台面道具：白瓷、原木板、岩板、大理石、手工陶碗等。", en: "Plates, boards, glassware and surface props: white ceramic, wood board, slate, marble, artisan bowl, etc." },
+    mode: "single",
+    level: "advanced",
+    required: false,
+    optionSetId: "image_food_tableware",
+    scopeToOption: [
+      "image_subject:food_beverage",
+      "image_subject:plated_dish",
+      "image_subject:dessert_beverage",
+    ],
+  },
 ];
 
 export const imagePromptAgentWorkType: WorkTypeConfig = {

@@ -626,6 +626,26 @@ export const GRADIENT: GradientData = {
           "rationale": "情绪/氛围",
           "corpusFreq": 201,
           "source": "audit:precision>=medium"
+        },
+        {
+          "questionId": "food_state",
+          "rationale": "P7 food state — visual surface properties and freshness/heat signals",
+          "source": "redesign:P7",
+          "scopeToOption": [
+            "image_subject:food_beverage",
+            "image_subject:plated_dish",
+            "image_subject:dessert_beverage",
+          ],
+        },
+        {
+          "questionId": "food_tableware_styling",
+          "rationale": "P7 food tableware — plates, boards, glassware, surface props",
+          "source": "redesign:P7",
+          "scopeToOption": [
+            "image_subject:food_beverage",
+            "image_subject:plated_dish",
+            "image_subject:dessert_beverage",
+          ],
         }
       ],
       "tertiary": [
@@ -645,6 +665,8 @@ export const GRADIENT: GradientData = {
         "color_palette",
         "art_style",
         "mood",
+        "food_state",
+        "food_tableware_styling",
         "post_processing"
       ]
     },

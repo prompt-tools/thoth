@@ -57,7 +57,7 @@ describe("imagePromptAgentWorkType (Phase A split)", () => {
     expect(canonicalIds).not.toContain("camera_angle");
   });
 
-  it("preserves canonical dimensions (besides the perspective split + Phase B/P4/P5/P6 additions)", () => {
+  it("preserves canonical dimensions (besides the perspective split + Phase B/P4/P5/P6/P7 additions)", () => {
     const canonicalOther = imagePromptWorkType.questions
       .map((q) => q.id)
       .filter((id) => id !== "perspective");
@@ -68,7 +68,8 @@ describe("imagePromptAgentWorkType (Phase A split)", () => {
         !PHASE_B_IDS.includes(id) &&
         !PHASE_P4_IDS.includes(id) &&
         !PHASE_P5_IDS.includes(id) &&
-        !PHASE_P6_IDS.includes(id)
+        !PHASE_P6_IDS.includes(id) &&
+        !PHASE_P7_IDS.includes(id)
     );
     expect(agentOther).toEqual(canonicalOther);
   });
@@ -172,6 +173,49 @@ describe("imagePromptAgentWorkType (P6 portrait expression dim)", () => {
     expect(outfitQ?.scopeToOption).toContain("image_subject:single_person");
     const hairQ = imagePromptAgentWorkType.questions.find((q) => q.id === "hair");
     expect(hairQ?.scopeToOption).toContain("image_subject:single_person");
+  });
+});
+
+/** P7: food-scoped dims (food_state + food_tableware_styling). */
+const PHASE_P7_EXPECTED: Record<string, number> = {
+  food_state: 12,
+  food_tableware_styling: 10,
+};
+const PHASE_P7_IDS = Object.keys(PHASE_P7_EXPECTED);
+
+describe("imagePromptAgentWorkType (P7 food-scoped dimensions)", () => {
+  const agentIds = imagePromptAgentWorkType.questions.map((q) => q.id);
+
+  it("adds food_state and food_tableware_styling to the agent worktype", () => {
+    for (const id of PHASE_P7_IDS) expect(agentIds).toContain(id);
+  });
+
+  it("does NOT add P7 dims to the canonical (main-app) worktype", () => {
+    const canonicalIds = imagePromptWorkType.questions.map((q) => q.id);
+    for (const id of PHASE_P7_IDS) expect(canonicalIds).not.toContain(id);
+  });
+
+  it("manifest emits each P7 dim with the expected option count", () => {
+    const manifest = buildCatalogManifest();
+    for (const [id, count] of Object.entries(PHASE_P7_EXPECTED)) {
+      const dim = manifest.find((d) => d.questionId === id);
+      expect(dim, `P7 dim ${id} missing from manifest`).toBeDefined();
+      expect(dim?.options).toHaveLength(count);
+    }
+  });
+
+  it("food_state is scoped to all 3 food subjects", () => {
+    const q = imagePromptAgentWorkType.questions.find((q) => q.id === "food_state");
+    expect(q?.scopeToOption).toContain("image_subject:food_beverage");
+    expect(q?.scopeToOption).toContain("image_subject:plated_dish");
+    expect(q?.scopeToOption).toContain("image_subject:dessert_beverage");
+  });
+
+  it("food_tableware_styling is scoped to all 3 food subjects", () => {
+    const q = imagePromptAgentWorkType.questions.find((q) => q.id === "food_tableware_styling");
+    expect(q?.scopeToOption).toContain("image_subject:food_beverage");
+    expect(q?.scopeToOption).toContain("image_subject:plated_dish");
+    expect(q?.scopeToOption).toContain("image_subject:dessert_beverage");
   });
 });
 

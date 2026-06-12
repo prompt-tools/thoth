@@ -32,6 +32,8 @@ import { imageArchTypeOptions } from "./image-arch-type.options";
 import { imageArchMaterialOptions } from "./image-arch-material.options";
 import { imageArchViewpointOptions } from "./image-arch-viewpoint.options";
 import { imagePortraitExpressionOptions } from "./image-portrait-expression.options";
+import { imageFoodStateOptions } from "./image-food-state.options";
+import { imageFoodTablewareOptions } from "./image-food-tableware.options";
 
 const imageOptionSets = [
   imagePublishScenarioOptions,
@@ -69,6 +71,9 @@ const imageOptionSets = [
   imageArchViewpointOptions,
   // P6: portrait expression (scoped to single_person / character_design)
   imagePortraitExpressionOptions,
+  // P7: food attribute dims (scoped to food_item / beverage_item)
+  imageFoodStateOptions,
+  imageFoodTablewareOptions,
 ] satisfies OptionSet[];
 
 for (const set of imageOptionSets) {

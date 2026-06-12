@@ -14,6 +14,8 @@ const VALID_IDS = new Set([
   "arch_style", "arch_type", "arch_material", "arch_viewpoint",
   // P6: portrait expression
   "portrait_expression",
+  // P7: food-scoped dims
+  "food_state", "food_tableware_styling",
 ]);
 
 const manifest = buildCatalogManifest();
