@@ -43,7 +43,15 @@ npm run dev
 
 ## 图片维度
 
-用途 · 主体 · 场景 · 构图 · 光线 · 画风 · 色调 · 氛围 · 视角 · 比例 · 细节 · 后期 · 约束 · 时间季节（选项在 `src/lib/prompt/options/image/` 持续扩充）
+**通用维度（14 个）：** 用途 · 主体 · 场景 · 构图 · 光线 · 画风 · 色调 · 氛围 · 视角 · 比例 · 细节 · 后期 · 约束 · 时间季节
+
+**主体专属维度（选中对应主体后自动解锁）：**
+- 宠物/动物 — 品种、毛色、姿态、表情、眼神、数量
+- 建筑 — 建筑风格、建筑类型、材质、视角
+- 人像 — 神情、姿势、服装、发型
+- 食物 — 食物状态、餐具与摆盘
+
+共 32 个维度、446 个选项。
 
 ## 技术栈
 
@@ -64,7 +72,7 @@ npm run build
 | 仓库 | 内容 |
 |------|------|
 | **thoth**（本仓库） | 上线版:仅图片、AI 自适应向导 |
-| **[controllable-prompt-guide](https://github.com/prompt-tools/controllable-prompt-guide)** | 视频 + 图片,可切换工种(含评测/测试) |
+| **[controllable-image-prompt-guide](https://github.com/prompt-tools/controllable-image-prompt-guide)** | 开发 + 评测仓:相同图片功能的测试分支与 SCSI 评测流水线 |
 
 ## 许可
 

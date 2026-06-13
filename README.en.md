@@ -57,16 +57,24 @@ Next.js 15 · TypeScript 5.7 · React 19 · Tailwind CSS v3 · Vitest 4. Deploye
 Vercel: `/api/llm` proxies the model server-side (built-in key); `/api/telemetry`
 records each step for analysis.
 
-## Scope (this repo)
+## Dimensions
 
-| Item | Value |
-|------|--------|
-| Work type | `image_prompt` only |
-| Target | `generic_image` only |
-| Options | Under `src/lib/prompt/options/image/` |
+**14 universal dimensions:** use case · subject · scene · composition · lighting · art style · color · mood · perspective · aspect ratio · detail · post-processing · constraints · time/season
 
-For **video** (Seedance, Veo 3, etc.) and work-type switching, use the
-[main repository](https://github.com/prompt-tools/controllable-prompt-guide).
+**Subject-specific dimensions (unlocked when a matching subject is selected):**
+- Pet/animal — breed, coat, pose, expression, gaze, count
+- Architecture — style, type, material, viewpoint
+- Portrait — expression, pose, outfit, hair
+- Food — food state, tableware & plating
+
+32 dimensions · 446 options in total.
+
+## Related
+
+| Repo | Purpose |
+|------|---------|
+| **thoth** (this repo) | Production app on Vercel |
+| **[controllable-image-prompt-guide](https://github.com/prompt-tools/controllable-image-prompt-guide)** | Dev + eval repo: feature branches and SCSI evaluation pipeline |
 
 ## License
 
