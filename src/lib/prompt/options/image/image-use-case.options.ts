@@ -69,7 +69,7 @@ export const imageUseCaseOptions: OptionSet = {
       },
       appliesTo: ["generic_image"],
       suggests: {
-        subject: ["image_subject:hero_product", "image_subject:single_person"],
+        subject: ["image_subject:single_person", "image_subject:character_design"],
         composition: ["image_composition:centered", "image_composition:symmetrical"],
         lighting: ["image_lighting:cinematic", "image_lighting:hard_dramatic"],
         art_style: ["image_art_style:digital_painting", "image_art_style:vector_flat", "image_art_style:photorealistic"],
@@ -92,7 +92,7 @@ export const imageUseCaseOptions: OptionSet = {
       },
       appliesTo: ["generic_image"],
       suggests: {
-        subject: ["image_subject:hero_product", "image_subject:single_person"],
+        subject: ["image_subject:single_person", "image_subject:character_design"],
         composition: ["image_composition:centered", "image_composition:negative_space"],
         color_palette: ["image_color_palette:vibrant", "image_color_palette:complementary"],
         mood: ["image_mood:epic_grand", "image_mood:mysterious"],
@@ -113,7 +113,7 @@ export const imageUseCaseOptions: OptionSet = {
       },
       appliesTo: ["generic_image"],
       suggests: {
-        subject: ["image_subject:hero_product"],
+        subject: ["image_subject:single_person"],
         scene: ["image_scene:white_bg", "image_scene:studio_env"],
         composition: ["image_composition:centered"],
         lighting: ["image_lighting:studio_clean"],
@@ -160,8 +160,8 @@ export const imageUseCaseOptions: OptionSet = {
       },
       appliesTo: ["generic_image"],
       suggests: {
-        subject: ["image_subject:natural_landscape"],
-        scene: ["image_scene:natural_landscape", "image_scene:sky_cloud"],
+        subject: ["image_subject:character_design"],
+        scene: ["image_scene:studio_env", "image_scene:sky_cloud"],
         composition: ["image_composition:rule_of_thirds"],
         lighting: ["image_lighting:golden_hour", "image_lighting:blue_hour"],
         art_style: ["image_art_style:minimalist", "image_art_style:digital_painting"],
@@ -184,7 +184,7 @@ export const imageUseCaseOptions: OptionSet = {
       },
       appliesTo: ["generic_image"],
       suggests: {
-        subject: ["image_subject:character_design", "image_subject:geometric_abstract"],
+        subject: ["image_subject:character_design", "image_subject:anime_character"],
         art_style: ["image_art_style:digital_painting", "image_art_style:watercolor", "image_art_style:vector_flat"],
         color_palette: ["image_color_palette:vibrant", "image_color_palette:pastel"],
         mood: ["image_mood:playful_cute", "image_mood:serene"],
@@ -227,7 +227,7 @@ export const imageUseCaseOptions: OptionSet = {
       },
       appliesTo: ["generic_image"],
       suggests: {
-        subject: ["image_subject:hero_product", "image_subject:single_person"],
+        subject: ["image_subject:single_person", "image_subject:character_design"],
         composition: ["image_composition:negative_space", "image_composition:centered"],
         aspect_ratio: ["image_aspect_ratio:landscape_16_9", "image_aspect_ratio:ultra_wide_2_1"],
         color_palette: ["image_color_palette:vibrant", "image_color_palette:complementary"],
@@ -248,7 +248,7 @@ export const imageUseCaseOptions: OptionSet = {
       },
       appliesTo: ["generic_image"],
       suggests: {
-        subject: ["image_subject:single_person", "image_subject:food_beverage"],
+        subject: ["image_subject:single_person", "image_subject:beautiful_woman"],
         composition: ["image_composition:fill_frame"],
         lighting: ["image_lighting:window_soft"],
         art_style: ["image_art_style:fashion_photography", "image_art_style:film_photography"],
@@ -271,7 +271,7 @@ export const imageUseCaseOptions: OptionSet = {
       },
       appliesTo: ["generic_image"],
       suggests: {
-        subject: ["image_subject:single_person", "image_subject:hero_product"],
+        subject: ["image_subject:single_person", "image_subject:handsome_man"],
         composition: ["image_composition:centered", "image_composition:fill_frame"],
         lighting: ["image_lighting:high_key", "image_lighting:hard_dramatic"],
         art_style: ["image_art_style:photorealistic", "image_art_style:digital_painting"],
@@ -294,7 +294,7 @@ export const imageUseCaseOptions: OptionSet = {
       },
       appliesTo: ["generic_image"],
       suggests: {
-        subject: ["image_subject:hero_product"],
+        subject: ["image_subject:single_person"],
         scene: ["image_scene:white_bg"],
         composition: ["image_composition:centered"],
         lighting: ["image_lighting:studio_clean"],
@@ -362,7 +362,7 @@ export const imageUseCaseOptions: OptionSet = {
       },
       appliesTo: ["generic_image"],
       suggests: {
-        subject: ["image_subject:geometric_abstract", "image_subject:natural_landscape"],
+        subject: ["image_subject:novel_character", "image_subject:character_design"],
         composition: ["image_composition:rule_of_thirds", "image_composition:negative_space"],
         lighting: ["image_lighting:cinematic", "image_lighting:golden_hour"],
         art_style: ["image_art_style:digital_painting", "image_art_style:photorealistic"],
@@ -385,7 +385,7 @@ export const imageUseCaseOptions: OptionSet = {
       },
       appliesTo: ["generic_image"],
       suggests: {
-        subject: ["image_subject:hero_product"],
+        subject: ["image_subject:single_person"],
         composition: ["image_composition:centered", "image_composition:flat_lay"],
         lighting: ["image_lighting:studio_clean", "image_lighting:soft_dreamy"],
         art_style: ["image_art_style:product_photography", "image_art_style:minimalist"],
@@ -409,7 +409,7 @@ export const imageUseCaseOptions: OptionSet = {
       },
       appliesTo: ["generic_image"],
       suggests: {
-        subject: ["image_subject:food_beverage", "image_subject:plated_dish"],
+        subject: ["image_subject:beautiful_woman", "image_subject:character_design"],
         scene: ["image_scene:indoor_setting"],
         composition: ["image_composition:centered", "image_composition:flat_lay"],
         lighting: ["image_lighting:soft_dreamy", "image_lighting:warm_lamp"],
@@ -454,7 +454,7 @@ export const imageUseCaseOptions: OptionSet = {
       },
       appliesTo: ["generic_image"],
       suggests: {
-        subject: ["image_subject:hero_product"],
+        subject: ["image_subject:single_person"],
         composition: ["image_composition:centered"],
         lighting: ["image_lighting:studio_clean"],
         art_style: ["image_art_style:minimalist", "image_art_style:photorealistic"],

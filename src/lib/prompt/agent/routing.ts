@@ -1,61 +1,28 @@
-import { ENTRY_ROUTES } from "./audit-model";
-import { GRADIENT } from "./gradient";
-
-// Extended signals for Chinese terms not in ENTRY_ROUTES
-const EXTENDED_SIGNALS: Record<string, string[]> = {
-  "人像": ["女生", "女孩", "女士", "男人", "女人", "帅哥", "美女", "少年", "少女", "儿童", "婴儿", "portrait", "person", "people", "girl", "woman", "man", "boy"],
-};
-
 /**
- * Route a user description to a primary type by matching ENTRY_ROUTES signals.
- *
- * Tiebreak: 人像 wins on any hit → highest hit count → declaration order in GRADIENT.
- * Zero hits → "通用" (fallback).
+ * The product is portrait-only. Descriptions may mention animals, food, or
+ * buildings as scene props, but the primary subject route is always 人像.
  */
 export function routePrimaryType(description: string): string {
-  const lower = description.toLowerCase();
-
-  let bestType = "";
-  let bestCount = 0;
-  let bestIndex = Infinity;
-
-  for (const route of ENTRY_ROUTES) {
-    let count = 0;
-    for (const signal of route.signals) {
-      if (lower.includes(signal.toLowerCase())) count++;
-    }
-    // Extended signals
-    for (const signal of EXTENDED_SIGNALS[route.primaryType] || []) {
-      if (lower.includes(signal.toLowerCase())) count++;
-    }
-    if (count === 0) continue;
-
-    // 人像 priority: any hit on 人像 → win immediately
-    if (route.primaryType === "人像") return "人像";
-
-    if (count > bestCount || (count === bestCount && bestIndex > getGradientIndex(route.primaryType))) {
-      bestCount = count;
-      bestType = route.primaryType;
-      bestIndex = getGradientIndex(route.primaryType);
-    }
-  }
-
-  return bestType || "通用";
-}
-
-/** Get the index of a primaryType in GRADIENT.primaryTypes (declaration order). */
-function getGradientIndex(type: string): number {
-  const idx = GRADIENT.primaryTypes.findIndex((p) => p.type === type);
-  return idx >= 0 ? idx : Infinity;
+  void description;
+  return "人像";
 }
 
 // ── Description-aware subject suggestions ────────────────────────────────
 
-/** Signal words that imply a domestic pet → suggest image_subject:pet_animal. */
-const ANIMAL_PET_SIGNALS = ["猫", "狗", "宠物", "兔", "仓鼠", "cat", "dog", "pet", "rabbit", "hamster"];
+const WOMAN_SIGNALS = ["女生", "女孩", "美女", "女性", "女人", "女主", "1girl", "girl", "woman", "female"];
+const MAN_SIGNALS = ["男生", "帅哥", "男性", "男人", "男主", "1boy", "boy", "man", "male"];
+const COUPLE_SIGNALS = ["情侣", "双人", "cp", "couple", "duo", "恋人"];
+const GROUP_SIGNALS = ["多人", "群像", "团队", "group", "ensemble"];
+const GAME_SIGNALS = ["游戏", "手游", "卡面", "立绘", "gacha", "game character", "splash art"];
+const NOVEL_SIGNALS = ["小说", "封面", "主角", "book cover", "novel"];
+const OTOME_SIGNALS = ["乙游", "视觉小说", "恋爱游戏", "otome", "visual novel", "dating sim"];
+const ANIME_SIGNALS = ["二次元", "动漫", "漫画", "anime", "manga"];
+const VIRTUAL_SIGNALS = ["虚拟", "vtuber", "vup", "oc", "虚拟偶像", "原创角色"];
+const COSPLAY_SIGNALS = ["cosplay", "coser", "角色扮演"];
 
-/** Signal words that imply a wild animal → suggest image_subject:wildlife. */
-const ANIMAL_WILD_SIGNALS = ["野生", "狮", "虎", "狼", "熊", "lion", "tiger", "wolf", "bear", "safari"];
+function hasAny(text: string, signals: string[]): boolean {
+  return signals.some((signal) => text.includes(signal.toLowerCase()));
+}
 
 /**
  * Derive suggested subject option ids from the user's free-text description and
@@ -65,16 +32,17 @@ const ANIMAL_WILD_SIGNALS = ["野生", "狮", "虎", "狼", "熊", "lion", "tige
  * Returns an empty Set when no strong signal is found — never forces a suggestion.
  */
 export function suggestedIdsFromDescription(description: string, type: string): Set<string> {
+  if (type !== "人像") return new Set();
   const lower = description.toLowerCase();
-  if (type === "动物") {
-    if (ANIMAL_PET_SIGNALS.some(s => lower.includes(s.toLowerCase()))) {
-      return new Set(["image_subject:pet_animal"]);
-    }
-    if (ANIMAL_WILD_SIGNALS.some(s => lower.includes(s.toLowerCase()))) {
-      return new Set(["image_subject:wildlife"]);
-    }
-  }
-  // For other routed types the subject category has ≤4 options after pre-filtering,
-  // so a forced suggestion adds little value and risks being wrong.
+  if (hasAny(lower, OTOME_SIGNALS)) return new Set(["image_subject:otome_character"]);
+  if (hasAny(lower, GAME_SIGNALS)) return new Set(["image_subject:game_character"]);
+  if (hasAny(lower, NOVEL_SIGNALS)) return new Set(["image_subject:novel_character"]);
+  if (hasAny(lower, VIRTUAL_SIGNALS)) return new Set(["image_subject:virtual_idol"]);
+  if (hasAny(lower, COSPLAY_SIGNALS)) return new Set(["image_subject:cosplay_character"]);
+  if (hasAny(lower, ANIME_SIGNALS)) return new Set(["image_subject:anime_character"]);
+  if (hasAny(lower, COUPLE_SIGNALS)) return new Set(["image_subject:couple_portrait"]);
+  if (hasAny(lower, GROUP_SIGNALS)) return new Set(["image_subject:group_portrait"]);
+  if (hasAny(lower, WOMAN_SIGNALS)) return new Set(["image_subject:beautiful_woman"]);
+  if (hasAny(lower, MAN_SIGNALS)) return new Set(["image_subject:handsome_man"]);
   return new Set();
 }

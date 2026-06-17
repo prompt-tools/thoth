@@ -30,7 +30,7 @@ export interface OptionItem {
   usageHint?: LocalizedText;
   /** Option IDs in other dimensions that are recommended when this option is selected.
    *  Keys are question IDs (e.g., "subject", "lighting", "art_style").
-   *  Values are arrays of option IDs (e.g., ["image_subject:hero_product", "image_lighting:golden_hour"]).
+   *  Values are arrays of option IDs (e.g., ["image_subject:single_person", "image_lighting:golden_hour"]).
    *  Populated on image_use_case options; excludes constraints and advanced-only dimensions. */
   suggests?: Record<string, string[]>;
 }

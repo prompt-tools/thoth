@@ -36,9 +36,35 @@ const cameraAngleQuestion: QuestionSchema = {
   optionSetId: "image_camera_angle"
 };
 
-/** New prototype dimensions (Slice 2 / Phase B). Registered globally but only
- *  the prototype worktype references them, so the main app `/` is unaffected.
- *  pose/outfit/hair lean on free text (presets are quick starters). */
+const PORTRAIT_SUBJECT_SCOPE = [
+  "image_subject:single_person",
+  "image_subject:beautiful_woman",
+  "image_subject:handsome_man",
+  "image_subject:couple_portrait",
+  "image_subject:group_portrait",
+  "image_subject:game_character",
+  "image_subject:novel_character",
+  "image_subject:otome_character",
+  "image_subject:anime_character",
+  "image_subject:virtual_idol",
+  "image_subject:cosplay_character",
+  "image_subject:character_design",
+  "image_subject:silhouette_figure"
+];
+
+const FICTIONAL_CHARACTER_SCOPE = [
+  "image_subject:game_character",
+  "image_subject:novel_character",
+  "image_subject:otome_character",
+  "image_subject:anime_character",
+  "image_subject:virtual_idol",
+  "image_subject:cosplay_character",
+  "image_subject:character_design"
+];
+
+/** Portrait-only dimensions. They are registered globally but only this adaptive
+ * worktype references them; most are scoped so the renderer folds them into the
+ * leading subject phrase instead of leaking standalone non-human dimensions. */
 const phaseBQuestions: QuestionSchema[] = [
   {
     id: "camera",
@@ -51,6 +77,105 @@ const phaseBQuestions: QuestionSchema[] = [
     optionSetId: "image_camera"
   },
   {
+    id: "person_type",
+    version: "0.1.0",
+    title: { zh: "人物方向", en: "Portrait direction" },
+    helper: { zh: "真人写真、漂亮男女、游戏角色、小说人物、乙游或二次元等。", en: "Realistic portrait, attractive male/female, game, novel, otome, or anime character." },
+    mode: "single",
+    level: "core",
+    required: false,
+    optionSetId: "image_person_type",
+    scopeToOption: PORTRAIT_SUBJECT_SCOPE
+  },
+  {
+    id: "gender_presentation",
+    version: "0.1.0",
+    title: { zh: "性别呈现", en: "Gender presentation" },
+    helper: { zh: "人物整体更偏女性化、男性化、中性，或不强调性别。", en: "Feminine, masculine, androgynous, or unspecified presentation." },
+    mode: "single",
+    level: "core",
+    required: false,
+    optionSetId: "image_gender_presentation",
+    scopeToOption: PORTRAIT_SUBJECT_SCOPE
+  },
+  {
+    id: "age_band",
+    version: "0.1.0",
+    title: { zh: "年龄段", en: "Age band" },
+    helper: { zh: "选择人物年龄气质；少年少女只允许健康非性感化表达。", en: "Choose age presence; teen characters must remain healthy and non-sexualized." },
+    mode: "single",
+    level: "advanced",
+    required: false,
+    optionSetId: "image_age_band",
+    scopeToOption: PORTRAIT_SUBJECT_SCOPE
+  },
+  {
+    id: "skin_tone",
+    version: "0.1.0",
+    title: { zh: "肤色/肤质", en: "Skin tone / texture" },
+    helper: { zh: "肤色、肤质与真实皮肤细节，避免塑料感磨皮。", en: "Skin tone, texture, and realistic skin detail." },
+    mode: "multi",
+    level: "advanced",
+    required: false,
+    optionSetId: "image_skin_tone",
+    scopeToOption: PORTRAIT_SUBJECT_SCOPE
+  },
+  {
+    id: "face_features",
+    version: "0.1.0",
+    title: { zh: "脸型/五官", en: "Face / features" },
+    helper: { zh: "脸型、眼神、五官和角色辨识点。", en: "Face shape, gaze, features, and identity markers." },
+    mode: "multi",
+    level: "advanced",
+    required: false,
+    optionSetId: "image_face_features",
+    scopeToOption: PORTRAIT_SUBJECT_SCOPE
+  },
+  {
+    id: "body_type",
+    version: "0.1.0",
+    title: { zh: "体型/身形", en: "Body type" },
+    helper: { zh: "全身或半身图中人物的身形比例与体态。", en: "Body shape and posture for half-body or full-body portraits." },
+    mode: "single",
+    level: "advanced",
+    required: false,
+    optionSetId: "image_body_type",
+    scopeToOption: PORTRAIT_SUBJECT_SCOPE
+  },
+  {
+    id: "character_archetype",
+    version: "0.1.0",
+    title: { zh: "角色原型", en: "Character archetype" },
+    helper: { zh: "乙游、小说、游戏和虚拟角色的性格/身份原型。", en: "Personality or role archetype for otome, novel, game, and virtual characters." },
+    mode: "single",
+    level: "advanced",
+    required: false,
+    optionSetId: "image_character_archetype",
+    scopeToOption: FICTIONAL_CHARACTER_SCOPE
+  },
+  {
+    id: "character_render_style",
+    version: "0.1.0",
+    title: { zh: "角色呈现风格", en: "Character render style" },
+    helper: { zh: "真人、半写实、乙游 CG、手游卡面、小说封面或头像立绘。", en: "Realistic, semi-realistic, otome CG, gacha art, novel cover, or avatar rendering." },
+    mode: "single",
+    level: "advanced",
+    required: false,
+    optionSetId: "image_character_render_style",
+    scopeToOption: PORTRAIT_SUBJECT_SCOPE
+  },
+  {
+    id: "character_interaction",
+    version: "0.1.0",
+    title: { zh: "动作/互动", en: "Action / interaction" },
+    helper: { zh: "对视、牵手 POV、拥抱、战斗动作或手持道具等。", en: "Eye contact, holding-hands POV, embrace, battle action, or holding props." },
+    mode: "single",
+    level: "advanced",
+    required: false,
+    optionSetId: "image_character_interaction",
+    scopeToOption: PORTRAIT_SUBJECT_SCOPE
+  },
+  {
     id: "pose",
     version: "0.1.0",
     title: { zh: "姿态/动作", en: "Pose" },
@@ -59,10 +184,7 @@ const phaseBQuestions: QuestionSchema[] = [
     level: "advanced",
     required: false,
     optionSetId: "image_pose",
-    scopeToOption: [
-      "image_subject:single_person", "image_subject:group_portrait",
-      "image_subject:character_design", "image_subject:silhouette_figure"
-    ]
+    scopeToOption: PORTRAIT_SUBJECT_SCOPE
   },
   {
     id: "outfit",
@@ -73,10 +195,7 @@ const phaseBQuestions: QuestionSchema[] = [
     level: "advanced",
     required: false,
     optionSetId: "image_outfit",
-    scopeToOption: [
-      "image_subject:single_person", "image_subject:group_portrait",
-      "image_subject:character_design"
-    ]
+    scopeToOption: PORTRAIT_SUBJECT_SCOPE
   },
   {
     id: "hair",
@@ -87,122 +206,8 @@ const phaseBQuestions: QuestionSchema[] = [
     level: "advanced",
     required: false,
     optionSetId: "image_hair",
-    scopeToOption: [
-      "image_subject:single_person", "image_subject:group_portrait",
-      "image_subject:character_design"
-    ]
+    scopeToOption: PORTRAIT_SUBJECT_SCOPE
   },
-  {
-    id: "product_material",
-    version: "0.1.0",
-    title: { zh: "产品材质", en: "Product material" },
-    helper: { zh: "产品的主要材质与表面质感。", en: "The product's primary material and surface finish." },
-    mode: "multi",
-    level: "advanced",
-    required: false,
-    optionSetId: "image_product_material"
-  },
-  {
-    id: "weather",
-    version: "0.1.0",
-    title: { zh: "天气", en: "Weather" },
-    helper: { zh: "场景的天气氛围。", en: "The weather atmosphere of the scene." },
-    mode: "single",
-    level: "advanced",
-    required: false,
-    optionSetId: "image_weather"
-  },
-  // P4: animal attribute dims — scoped to pet_animal / wildlife via gradient
-  {
-    id: "animal_breed",
-    version: "0.1.0",
-    title: { zh: "品种", en: "Breed" },
-    helper: { zh: "宠物或动物的具体品种。", en: "The specific breed of the pet or animal." },
-    mode: "single",
-    level: "core",
-    required: false,
-    optionSetId: "image_animal_breed",
-    scopeToOption: ["image_subject:pet_animal", "image_subject:wildlife"]
-  },
-  {
-    id: "animal_coat",
-    version: "0.1.0",
-    title: { zh: "毛色/花纹", en: "Coat color / pattern" },
-    helper: { zh: "动物的被毛颜色与花纹类型。", en: "The coat color and pattern of the animal." },
-    mode: "single",
-    level: "core",
-    required: false,
-    optionSetId: "image_animal_coat",
-    scopeToOption: ["image_subject:pet_animal", "image_subject:wildlife"]
-  },
-  {
-    id: "animal_pose",
-    version: "0.1.0",
-    title: { zh: "姿态/动作", en: "Pose / action" },
-    helper: { zh: "动物的姿势或动作状态。", en: "The posture or action state of the animal." },
-    mode: "single",
-    level: "advanced",
-    required: false,
-    optionSetId: "image_animal_pose",
-    scopeToOption: ["image_subject:pet_animal", "image_subject:wildlife"]
-  },
-  {
-    id: "animal_expression",
-    version: "0.1.0",
-    title: { zh: "表情/神态", en: "Expression / gaze" },
-    helper: { zh: "动物面部的神情和视线方向（近景时有效）。", en: "Facial expression and gaze direction (effective in close-up framing)." },
-    mode: "single",
-    level: "advanced",
-    required: false,
-    optionSetId: "image_animal_expression",
-    scopeToOption: ["image_subject:pet_animal"]
-  },
-  // P5: architecture attribute dims — scoped to architectural_exterior / interior_space
-  {
-    id: "arch_style",
-    version: "0.1.0",
-    title: { zh: "建筑风格", en: "Architectural style" },
-    helper: { zh: "建筑的历史或当代风格流派。", en: "The historical or contemporary style of the architecture." },
-    mode: "single",
-    level: "core",
-    required: false,
-    optionSetId: "image_arch_style",
-    scopeToOption: ["image_subject:architectural_exterior", "image_subject:interior_space"]
-  },
-  {
-    id: "arch_type",
-    version: "0.1.0",
-    title: { zh: "建筑类型", en: "Building type" },
-    helper: { zh: "建筑的功能类型或用途。", en: "The functional type or purpose of the building." },
-    mode: "single",
-    level: "core",
-    required: false,
-    optionSetId: "image_arch_type",
-    scopeToOption: ["image_subject:architectural_exterior", "image_subject:interior_space"]
-  },
-  {
-    id: "arch_material",
-    version: "0.1.0",
-    title: { zh: "建筑材质", en: "Building material" },
-    helper: { zh: "建筑主要外立面或结构材料。", en: "The primary facade or structural material of the building." },
-    mode: "single",
-    level: "core",
-    required: false,
-    optionSetId: "image_arch_material",
-    scopeToOption: ["image_subject:architectural_exterior", "image_subject:interior_space"]
-  },
-  {
-    id: "arch_viewpoint",
-    version: "0.1.0",
-    title: { zh: "建筑视角", en: "Architectural viewpoint" },
-    helper: { zh: "拍摄或呈现建筑的角度与构图方式。", en: "The angle and compositional approach for capturing or presenting the building." },
-    mode: "single",
-    level: "advanced",
-    required: false,
-    optionSetId: "image_arch_viewpoint",
-    scopeToOption: ["image_subject:architectural_exterior", "image_subject:interior_space"]
-  },
-  // P6: portrait expression — scoped to single_person / character_design
   {
     id: "portrait_expression",
     version: "0.1.0",
@@ -212,38 +217,7 @@ const phaseBQuestions: QuestionSchema[] = [
     level: "core",
     required: false,
     optionSetId: "image_portrait_expression",
-    scopeToOption: ["image_subject:single_person", "image_subject:character_design"]
-  },
-  // P7: food-scoped dims — scoped to food_beverage / plated_dish / dessert_beverage
-  {
-    id: "food_state",
-    version: "0.1.0",
-    title: { zh: "食物状态", en: "Food state" },
-    helper: { zh: "食物表面视觉属性与热度信号：酥脆、光泽、融化、蒸汽、多汁等。", en: "Food surface visual properties and freshness/heat signals: crispy, glossy, melting, steaming, juicy, etc." },
-    mode: "single",
-    level: "advanced",
-    required: false,
-    optionSetId: "image_food_state",
-    scopeToOption: [
-      "image_subject:food_beverage",
-      "image_subject:plated_dish",
-      "image_subject:dessert_beverage",
-    ],
-  },
-  {
-    id: "food_tableware_styling",
-    version: "0.1.0",
-    title: { zh: "食器/摆盘", en: "Tableware / plating surface" },
-    helper: { zh: "盘子、木板、玻璃杯和台面道具：白瓷、原木板、岩板、大理石、手工陶碗等。", en: "Plates, boards, glassware and surface props: white ceramic, wood board, slate, marble, artisan bowl, etc." },
-    mode: "single",
-    level: "advanced",
-    required: false,
-    optionSetId: "image_food_tableware",
-    scopeToOption: [
-      "image_subject:food_beverage",
-      "image_subject:plated_dish",
-      "image_subject:dessert_beverage",
-    ],
+    scopeToOption: PORTRAIT_SUBJECT_SCOPE
   },
 ];
 

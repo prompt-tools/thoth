@@ -18,7 +18,7 @@ const IMAGE_SPECS: Spec[] = [
     minimalSelections: {},
     richSelections: {
       use_case: ["image_use_case:social_media_post"],
-      subject: ["image_subject:hero_product"],
+      subject: ["image_subject:single_person"],
     },
   },
 ];

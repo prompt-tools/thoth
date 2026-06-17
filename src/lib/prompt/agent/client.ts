@@ -243,8 +243,8 @@ export function buildTurnRequest(
     filteredCurrentOptionIds: [],
   };
 
-  // Pre-filter subject options by primary type so the model only sees relevant
-  // categories (e.g., for "动物" only pet_animal + wildlife, never food_beverage).
+  // Pre-filter subject options by the portrait-only category so the model never
+  // sees product/animal/food subjects even on fallback paths.
   const currentDim = pool[0];
   let optionsForModel = currentDim?.options ?? [];
   if (currentQid === "subject" && type !== "通用") {

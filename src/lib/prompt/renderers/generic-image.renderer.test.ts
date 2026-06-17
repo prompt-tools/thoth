@@ -86,19 +86,19 @@ describe("P6 portrait renderer coupling: pose/outfit/hair fold into subject phra
     }
   });
 
-  it("portrait dims do NOT appear for a non-portrait subject (animal)", () => {
-    const animalSubjectItem = {
+  it("portrait dims do NOT appear for a subject id outside portrait scope", () => {
+    const outsideScopeSubjectItem = {
       questionId: "subject",
       title: { zh: "主体", en: "Subject" },
       selectedOptions: [
         makeOption(
-          "image_subject:pet_animal",
-          { zh: "宠物", en: "Pet" },
-          { zh: "一只可爱的宠物", en: "an adorable pet" }
+          "image_subject:object_subject",
+          { zh: "物体", en: "Object" },
+          { zh: "一个非人像主体", en: "a non-portrait subject" }
         ),
       ],
     };
-    const rendered = renderGenericImage(makeBrief([animalSubjectItem, poseItem, outfitItem, hairItem]));
+    const rendered = renderGenericImage(makeBrief([outsideScopeSubjectItem, poseItem, outfitItem, hairItem]));
     expect(rendered.zhPrompt).not.toContain("站立全身姿势");
     expect(rendered.zhPrompt).not.toContain("休闲轻便服装");
     expect(rendered.zhPrompt).not.toContain("整洁短发");
@@ -113,7 +113,7 @@ describe("generic-image renderer snapshot", () => {
       rawIntent: "",
       selections: {
         use_case: ["image_use_case:social_media_post"],
-        subject: ["image_subject:hero_product"],
+        subject: ["image_subject:single_person"],
       },
     });
     expect(rendered.zhPrompt.length).toBeGreaterThan(0);

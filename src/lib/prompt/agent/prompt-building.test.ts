@@ -69,9 +69,10 @@ describe("buildAgentGuidance", () => {
     }
   });
 
-  it("includes the entry-routing section with each primary type", () => {
-    expect(guidance).toContain("首轮路由");
+  it("includes the portrait-only product boundary section", () => {
+    expect(guidance).toContain("产品边界");
     for (const r of ENTRY_ROUTES) expect(guidance).toContain(r.primaryType);
+    expect(guidance).toContain("不能作为画面主体");
   });
 
   it("includes the framing-depth guidance", () => {

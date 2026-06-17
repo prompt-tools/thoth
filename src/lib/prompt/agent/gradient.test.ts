@@ -7,15 +7,16 @@ const VALID_IDS = new Set([
   "use_case", "subject", "scene", "composition", "lighting", "art_style",
   "constraints", "color_palette", "mood", "framing", "camera_angle",
   "aspect_ratio", "detail_level", "post_processing", "time_season",
-  "camera", "pose", "outfit", "hair", "product_material", "weather",
-  // P4: animal attribute dims
-  "animal_breed", "animal_coat", "animal_pose", "animal_expression",
-  // P5: architecture attribute dims
-  "arch_style", "arch_type", "arch_material", "arch_viewpoint",
-  // P6: portrait expression
-  "portrait_expression",
-  // P7: food-scoped dims
-  "food_state", "food_tableware_styling",
+  "camera", "pose", "outfit", "hair", "portrait_expression",
+  "person_type", "gender_presentation", "age_band", "skin_tone",
+  "face_features", "body_type", "character_archetype",
+  "character_render_style", "character_interaction",
+]);
+
+const NON_PORTRAIT_IDS = new Set([
+  "product_material", "weather", "animal_breed", "animal_coat",
+  "animal_pose", "animal_expression", "arch_style", "arch_type",
+  "arch_material", "arch_viewpoint", "food_state", "food_tableware_styling",
 ]);
 
 const manifest = buildCatalogManifest();
@@ -81,14 +82,21 @@ describe("gradient data integrity", () => {
     expect(violations).toEqual([]);
   });
 
-  it("通用 fallback type exists with CORE dimensions", () => {
+  it("通用 fallback type exists but only uses portrait dimensions", () => {
     const generic = GRADIENT.primaryTypes.find((p) => p.type === "通用");
     expect(generic).toBeDefined();
     const essIds = generic!.essential.map((x) => x.questionId);
     expect(essIds).toContain("subject");
+    expect(essIds).toContain("person_type");
+    expect(essIds).toContain("gender_presentation");
+    expect(essIds).toContain("portrait_expression");
     expect(essIds).toContain("scene");
-    expect(essIds).toContain("lighting");
-    expect(essIds).toContain("art_style");
-    expect(essIds).toContain("color_palette");
+    for (const id of [...generic!.order, ...essIds]) {
+      expect(NON_PORTRAIT_IDS.has(id)).toBe(false);
+    }
+  });
+
+  it("primary types are reduced to portrait and portrait fallback", () => {
+    expect(GRADIENT.primaryTypes.map((p) => p.type).sort()).toEqual(["人像", "通用"]);
   });
 });

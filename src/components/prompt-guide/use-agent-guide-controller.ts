@@ -325,8 +325,7 @@ export function useAgentGuideController() {
           // For the constraints question, pre-select anatomy-relevant defaults so the
           // user can submit with one tap rather than having to hunt for the option.
           const constraintsDefaults: Record<string, string[]> = {
-            "动物": ["image_constraints:no_bad_anatomy"],
-            "人像": ["image_constraints:no_bad_anatomy"],
+            "人像": ["image_constraints:no_bad_anatomy", "image_constraints:no_distorted_face"],
           };
           const defaultConstraints =
             next.nextQuestionId === "constraints"
@@ -418,7 +417,7 @@ export function useAgentGuideController() {
 
   // Options recommended by the audit associations given prior picks ("推荐" badge).
   // On the subject question (first turn), also derive suggestions from the description
-  // text so pet animals / wildlife get a badge even before any selection is made.
+  // text so portrait subject types get a badge even before any selection is made.
   const suggestedIds = useMemo(() => {
     const fromSelections = suggestedIdsFor(selectedOptionIds(selections));
     if (decision?.nextQuestionId === "subject") {

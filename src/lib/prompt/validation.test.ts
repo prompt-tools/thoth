@@ -20,7 +20,7 @@ const imageWorkType = resolveWorkType("image_prompt");
 
 const imageSelections: PromptSelections = {
   use_case: "image_use_case:social_media_post",
-  subject: "image_subject:hero_product",
+  subject: "image_subject:single_person",
   scene: "image_scene:studio_env",
   composition: "image_composition:centered",
   lighting: "image_lighting:soft_dreamy",

@@ -50,13 +50,12 @@ describe("conflictIdsFor (A2)", () => {
 // ── computeFillSet ──────────────────────────────────────────────────────
 
 describe("computeFillSet (A3)", () => {
-  it("returns secondary-only dimensions for 人画像 simple", () => {
+  it("returns secondary-only dimensions for 人像 simple", () => {
     const fill = computeFillSet("人像", [], manifest);
     expect(fill.length).toBeGreaterThan(0);
     expect(fill.length).toBeLessThanOrEqual(4);
 
-    // P2: lighting + color_palette demoted to secondary in 人像 branch
-    const essentialIds = ["subject", "framing", "scene"];
+    const essentialIds = ["subject", "person_type", "gender_presentation", "framing", "scene", "portrait_expression"];
     for (const eid of essentialIds) {
       expect(fill).not.toContain(eid);
     }
@@ -98,14 +97,13 @@ describe("computeFillSet (A3)", () => {
     expect(fill.length).toBeLessThanOrEqual(4);
   });
 
-  it("returns empty when all secondary already asked", () => {
-    // P2: color_palette is now secondary in 产品/静物 (demoted from essential)
-    const history: AgentHistoryItem[] = [
-      { questionId: "color_palette", selectedOptionIds: ["image_color_palette:neutral_tones"] },
-      { questionId: "composition", selectedOptionIds: ["image_composition:centered"] },
-      { questionId: "art_style", selectedOptionIds: ["image_art_style:photorealistic"] },
-    ];
-    const fill = computeFillSet("产品/静物", history, manifest);
+  it("returns empty when all portrait secondary dimensions are already asked", () => {
+    const allFill = computeFillSet("人像", [], manifest, 40);
+    const history: AgentHistoryItem[] = allFill.map((questionId) => ({
+      questionId,
+      selectedOptionIds: [manifest.find((d) => d.questionId === questionId)!.options[0].id],
+    }));
+    const fill = computeFillSet("人像", history, manifest, 40);
     expect(fill).toEqual([]);
   });
 });
@@ -114,7 +112,7 @@ describe("computeFillSet (A3)", () => {
 
 describe("resolveActiveSet (A1)", () => {
   it("activeDimensions still returns same results as before extraction", () => {
-    const types = ["人像", "产品/静物", "场景/氛围", "动物", "食物/饮品", "通用"];
+    const types = ["人像", "通用"];
     const precisions = ["simple", "standard", "detailed"] as const;
 
     for (const type of types) {
