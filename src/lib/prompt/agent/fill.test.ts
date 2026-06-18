@@ -118,6 +118,20 @@ describe("computeFillSet (A3)", () => {
     expect(boosted).toContain("character_render_style");
   });
 
+  it("uses cap 5 when seed boost applies", () => {
+    const history: AgentHistoryItem[] = [
+      { questionId: "subject", selectedOptionIds: ["image_subject:game_character"] },
+      { questionId: "person_type", selectedOptionIds: ["image_person_type:game_character"] },
+      { questionId: "gender_presentation", selectedOptionIds: ["image_gender_presentation:masculine"] },
+      { questionId: "framing", selectedOptionIds: ["image_framing:medium_shot"] },
+      { questionId: "portrait_expression", selectedOptionIds: ["image_portrait_expression:confident"] },
+    ];
+    const plain = computeFillSet("人像", history, manifest, 4, undefined, "普通描述");
+    const boosted = computeFillSet("人像", history, manifest, 5, undefined, "银发剑士游戏立绘");
+    expect(plain.length).toBeLessThanOrEqual(4);
+    expect(boosted.length).toBe(5);
+  });
+
   it("returns empty for types with no secondary remaining", () => {
     const fill = computeFillSet("通用", [], manifest);
     expect(fill.length).toBeLessThanOrEqual(4);

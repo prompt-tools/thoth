@@ -28,7 +28,22 @@ if (!file) {
 }
 
 const text = readFileSync(resolve(file), "utf8");
-const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+const lines = [];
+for (const raw of text.split(/\r?\n/)) {
+  const line = raw.trim();
+  if (!line) continue;
+  if (file.endsWith(".jsonl")) {
+    try {
+      const row = JSON.parse(line);
+      const content = String(row.content ?? row.raw ?? row.prompt ?? "").trim();
+      if (content) lines.push(content);
+    } catch {
+      /* skip malformed jsonl rows */
+    }
+  } else {
+    lines.push(line);
+  }
+}
 const report = analyzePortraitPrompts(lines, topN);
 
 console.log(JSON.stringify({

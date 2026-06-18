@@ -16,6 +16,7 @@ import { logAgent, getAgentLog } from "@/lib/prompt/agent/debug-log";
 import { routePrimaryType, suggestedIdsFromDescription } from "@/lib/prompt/agent/routing";
 import type { Precision } from "@/lib/prompt/agent/gradient";
 import { computeFillSet } from "@/lib/prompt/agent/fill";
+import { boostedQuestionIds } from "@/lib/prompt/agent/fill-boost";
 
 /** Flatten selection values (string | string[]) into a flat id list. */
 function selectedOptionIds(selections: PromptSelections): string[] {
@@ -47,10 +48,10 @@ function writeStorage(key: string, value: string): void {
 }
 
 // Safety ceiling on questions a browser session can ask. Set above the
-// longest gradient active-set (detailed 人像/场景 ≈16-17) so those flows finish
+// longest gradient active-set (detailed 人像 ≈23) so those flows finish
 // naturally via remainingEmpty rather than getting cut; only fires as a guard
 // against a never-terminating bug.
-const H3_MAX_TURNS = 18;
+const H3_MAX_TURNS = 28;
 
 /** Controller for the BYOK, multi-provider agent prototype. The agent picks the
  *  next dimension + narrowed options each turn (via /api/llm proxy); the final
@@ -270,7 +271,8 @@ export function useAgentGuideController() {
           // or when fillSet is empty
           if (precisionRef.current !== "detailed") {
             const type = routePrimaryType(descriptionRef.current);
-            const fillSet = computeFillSet(type, nextHistory, manifest, 4, undefined, descriptionRef.current);
+            const fillCap = boostedQuestionIds(descriptionRef.current).size > 0 ? 5 : 4;
+            const fillSet = computeFillSet(type, nextHistory, manifest, fillCap, undefined, descriptionRef.current);
 
             if (fillSet.length > 0) {
               logAgent("autofill", { fillSet, type, precision: precisionRef.current });
@@ -503,7 +505,8 @@ export function useAgentGuideController() {
 
     if (precisionRef.current !== "detailed") {
       const type = routePrimaryType(descriptionRef.current);
-      const fillSet = computeFillSet(type, history, manifest, 4, undefined, descriptionRef.current);
+      const fillCap = boostedQuestionIds(descriptionRef.current).size > 0 ? 5 : 4;
+      const fillSet = computeFillSet(type, history, manifest, fillCap, undefined, descriptionRef.current);
       if (fillSet.length > 0) {
         try {
           const fillResults = await autoFillDimensions(

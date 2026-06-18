@@ -28,12 +28,12 @@ function flag(name, fallback) {
 }
 const PROVIDER_ID = flag("provider", "deepseek");
 const MAX_RUNS = Number(flag("max-runs", "4"));
-const MAX_TURNS = Number(flag("max-turns", PRECISION === "detailed" ? "18" : "10"));
+const DRY_RUN = args.includes("--dry-run");
+const PRECISION = flag("precision", "simple");
+const MAX_TURNS = Number(flag("max-turns", PRECISION === "detailed" ? "28" : "10"));
 const WORKERS = Number(flag("workers", "4"));
 const SEED_FILE = flag("seeds", ".research/eval-seeds/seeds.txt");
 const BASE_SEED = Number(flag("seed", "42"));
-const DRY_RUN = args.includes("--dry-run");
-const PRECISION = flag("precision", "simple");
 const ANSWERER = flag("answerer", "random"); // "llm" = Claude haiku user-sim; "random" = legacy
 // Repeat the whole seed set ROUNDS times, each round with a distinct PRNG seed
 // per run — simulates many different users answering the same scenarios. Total
@@ -62,6 +62,7 @@ const { renderPrompt } = await loadTs("src/lib/prompt/adapters.ts");
 const { routePrimaryType } = await loadTs("src/lib/prompt/agent/routing.ts");
 const { imagePromptAgentWorkType } = await loadTs("src/lib/prompt/work-types/image-prompt-agent.worktype.ts");
 const { computeFillSet } = await loadTs("src/lib/prompt/agent/fill.ts");
+const { boostedQuestionIds } = await loadTs("src/lib/prompt/agent/fill-boost.ts");
 
 // ── validate provider ────────────────────────────────────────────────────
 if (!PROVIDER_PRESETS.some((p) => p.id === PROVIDER_ID)) {
@@ -370,7 +371,8 @@ async function runOne(runId, seedValue, description) {
   // P1-E2 fix: skip auto-fill on fallbackGiveUp (matches controller behavior)
   if (PRECISION !== "detailed" && terminationReason !== "error" && terminationReason !== "fallbackGiveUp") {
     const type = routePrimaryType(description);
-    const fillSet = computeFillSet(type, history, manifest, 4, undefined, description);
+    const fillCap = boostedQuestionIds(description).size > 0 ? 5 : 4;
+    const fillSet = computeFillSet(type, history, manifest, fillCap, undefined, description);
 
     if (fillSet.length > 0) {
       try {
