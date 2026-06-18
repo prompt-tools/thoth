@@ -31,6 +31,8 @@ import { imageBodyTypeOptions } from "./image-body-type.options";
 import { imageCharacterArchetypeOptions } from "./image-character-archetype.options";
 import { imageCharacterRenderStyleOptions } from "./image-character-render-style.options";
 import { imageCharacterInteractionOptions } from "./image-character-interaction.options";
+import { imageMakeupOptions } from "./image-makeup.options";
+import { imageCharacterPropsOptions } from "./image-character-props.options";
 
 const imageOptionSets = [
   imagePublishScenarioOptions,
@@ -64,6 +66,8 @@ const imageOptionSets = [
   imageCharacterArchetypeOptions,
   imageCharacterRenderStyleOptions,
   imageCharacterInteractionOptions,
+  imageMakeupOptions,
+  imageCharacterPropsOptions,
 ] satisfies OptionSet[];
 
 for (const set of imageOptionSets) {

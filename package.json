@@ -11,7 +11,8 @@
     "typecheck": "tsc --noEmit",
     "verify": "npm run typecheck && npm run lint -- --max-warnings=0 && npm test && NODE_ENV=production npm run build",
     "eval": "tsx .research/scripts/eval-agent.mjs --seeds .research/eval-seeds/portrait-seeds.txt",
-    "eval:report": "tsx .research/scripts/eval-report.mjs"
+    "eval:report": "tsx .research/scripts/eval-report.mjs",
+    "analyze-prompts": "tsx .research/scripts/analyze-portrait-prompts.mjs"
   },
   "engines": {
     "node": ">=22.6"

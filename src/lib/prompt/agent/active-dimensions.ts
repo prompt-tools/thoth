@@ -4,12 +4,45 @@ import {
   type PrecompiledCondition,
 } from "./gradient";
 import type { AgentHistoryItem } from "./decision";
+import { buildSubjectScopedIndex } from "../renderers/generic-image.renderer";
 
 export const PRECISION_ORDER: Record<Precision, number> = {
   simple: 0,
   standard: 1,
   detailed: 2,
 };
+
+const SUBJECT_SCOPED_INDEX = buildSubjectScopedIndex(GRADIENT);
+
+function selectedSubjectIds(history: AgentHistoryItem[]): Set<string> {
+  const entry = history.find((h) => h.questionId === "subject");
+  return entry ? new Set(entry.selectedOptionIds) : new Set();
+}
+
+/** Remove dimensions whose scopeToOption does not match the selected subject. */
+export function applySubjectScopeFilter(
+  active: Set<string>,
+  history: AgentHistoryItem[],
+  scopedIndex = SUBJECT_SCOPED_INDEX,
+): void {
+  const subjectIds = selectedSubjectIds(history);
+  for (const qid of [...active]) {
+    const activators = scopedIndex.get(qid);
+    if (!activators) continue;
+    if (subjectIds.size === 0) {
+      active.delete(qid);
+      continue;
+    }
+    let matched = false;
+    for (const id of subjectIds) {
+      if (activators.has(id)) {
+        matched = true;
+        break;
+      }
+    }
+    if (!matched) active.delete(qid);
+  }
+}
 
 /**
  * Compute the "active set" (union + suppress subtract) for a given
@@ -54,6 +87,8 @@ export function resolveActiveSet(
       active.delete(c.questionId);
     }
   }
+
+  applySubjectScopeFilter(active, history);
 
   return active;
 }

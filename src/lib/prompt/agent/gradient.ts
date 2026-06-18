@@ -236,21 +236,6 @@ export const GRADIENT: GradientData = {
           ]
         },
         {
-          "questionId": "character_archetype",
-          "rationale": "游戏/小说/乙游/虚拟角色需要角色原型和身份气质",
-          "corpusFreq": null,
-          "source": "portrait-only:character",
-          "scopeToOption": [
-            "image_subject:game_character",
-            "image_subject:novel_character",
-            "image_subject:otome_character",
-            "image_subject:anime_character",
-            "image_subject:virtual_idol",
-            "image_subject:cosplay_character",
-            "image_subject:character_design"
-          ]
-        },
-        {
           "questionId": "character_render_style",
           "rationale": "真人/半写实/乙游CG/卡面/小说封面决定输出语言",
           "corpusFreq": null,
@@ -290,6 +275,21 @@ export const GRADIENT: GradientData = {
             "image_subject:cosplay_character",
             "image_subject:character_design",
             "image_subject:silhouette_figure"
+          ]
+        },
+        {
+          "questionId": "character_props",
+          "rationale": "游戏/小说/乙游/虚拟角色常见武器、法杖、书卷等手持道具",
+          "corpusFreq": null,
+          "source": "portrait-only:character",
+          "scopeToOption": [
+            "image_subject:game_character",
+            "image_subject:novel_character",
+            "image_subject:otome_character",
+            "image_subject:anime_character",
+            "image_subject:virtual_idol",
+            "image_subject:cosplay_character",
+            "image_subject:character_design"
           ]
         },
         {
@@ -394,6 +394,42 @@ export const GRADIENT: GradientData = {
       ],
       "tertiary": [
         {
+          "questionId": "character_archetype",
+          "rationale": "专业模式才问角色原型；仅虚构角色主体",
+          "corpusFreq": null,
+          "source": "portrait-only:character",
+          "scopeToOption": [
+            "image_subject:game_character",
+            "image_subject:novel_character",
+            "image_subject:otome_character",
+            "image_subject:anime_character",
+            "image_subject:virtual_idol",
+            "image_subject:cosplay_character",
+            "image_subject:character_design"
+          ]
+        },
+        {
+          "questionId": "makeup",
+          "rationale": "特写/半身人像的妆容细节；专业模式",
+          "corpusFreq": null,
+          "source": "portrait-only:identity",
+          "scopeToOption": [
+            "image_subject:single_person",
+            "image_subject:beautiful_woman",
+            "image_subject:handsome_man",
+            "image_subject:couple_portrait",
+            "image_subject:group_portrait",
+            "image_subject:game_character",
+            "image_subject:novel_character",
+            "image_subject:otome_character",
+            "image_subject:anime_character",
+            "image_subject:virtual_idol",
+            "image_subject:cosplay_character",
+            "image_subject:character_design",
+            "image_subject:silhouette_figure"
+          ]
+        },
+        {
           "questionId": "composition",
           "rationale": "专业人像/角色图需要控制留白、主体位置和封面空间",
           "corpusFreq": 248,
@@ -485,6 +521,7 @@ export const GRADIENT: GradientData = {
         "age_band",
         "face_features",
         "hair",
+        "makeup",
         "outfit",
         "pose",
         "body_type",
@@ -495,153 +532,28 @@ export const GRADIENT: GradientData = {
         "character_render_style",
         "character_archetype",
         "character_interaction",
+        "character_props",
         "color_palette",
         "art_style",
         "mood",
         "composition",
         "post_processing"
       ]
-    },
-    {
-      "type": "通用",
-      "essential": [
-        {
-          "questionId": "subject",
-          "rationale": "通用入口也固定为人像主体",
-          "corpusFreq": 667,
-          "source": "portrait-only:fallback"
-        },
-        {
-          "questionId": "person_type",
-          "rationale": "无描述时仍先明确人像方向",
-          "corpusFreq": null,
-          "source": "portrait-only:fallback",
-          "scopeToOption": [
-            "image_subject:single_person",
-            "image_subject:beautiful_woman",
-            "image_subject:handsome_man",
-            "image_subject:couple_portrait",
-            "image_subject:group_portrait",
-            "image_subject:game_character",
-            "image_subject:novel_character",
-            "image_subject:otome_character",
-            "image_subject:anime_character",
-            "image_subject:virtual_idol",
-            "image_subject:cosplay_character",
-            "image_subject:character_design",
-            "image_subject:silhouette_figure"
-          ]
-        },
-        {
-          "questionId": "gender_presentation",
-          "rationale": "无描述时仍收窄性别呈现",
-          "corpusFreq": null,
-          "source": "portrait-only:fallback",
-          "scopeToOption": [
-            "image_subject:single_person",
-            "image_subject:beautiful_woman",
-            "image_subject:handsome_man",
-            "image_subject:couple_portrait",
-            "image_subject:group_portrait",
-            "image_subject:game_character",
-            "image_subject:novel_character",
-            "image_subject:otome_character",
-            "image_subject:anime_character",
-            "image_subject:virtual_idol",
-            "image_subject:cosplay_character",
-            "image_subject:character_design",
-            "image_subject:silhouette_figure"
-          ]
-        },
-        {
-          "questionId": "framing",
-          "rationale": "景别控深",
-          "corpusFreq": null,
-          "source": "portrait-only:fallback"
-        },
-        {
-          "questionId": "portrait_expression",
-          "rationale": "表情/神态",
-          "corpusFreq": null,
-          "source": "portrait-only:fallback",
-          "scopeToOption": [
-            "image_subject:single_person",
-            "image_subject:beautiful_woman",
-            "image_subject:handsome_man",
-            "image_subject:couple_portrait",
-            "image_subject:group_portrait",
-            "image_subject:game_character",
-            "image_subject:novel_character",
-            "image_subject:otome_character",
-            "image_subject:anime_character",
-            "image_subject:virtual_idol",
-            "image_subject:cosplay_character",
-            "image_subject:character_design",
-            "image_subject:silhouette_figure"
-          ]
-        }
-      ],
-      "secondary": [
-        {
-          "questionId": "scene",
-          "rationale": "人像背景/场景（简单模式由自动补全承担）",
-          "corpusFreq": 860,
-          "source": "portrait-only:fallback"
-        },
-        {
-          "questionId": "aspect_ratio",
-          "rationale": "画幅比例（标准精度起问）",
-          "corpusFreq": null,
-          "source": "portrait-only:fallback"
-        },
-        {
-          "questionId": "lighting",
-          "rationale": "人像光线",
-          "corpusFreq": 580,
-          "source": "portrait-only:fallback"
-        },
-        {
-          "questionId": "camera",
-          "rationale": "人像镜头",
-          "corpusFreq": 403,
-          "source": "portrait-only:fallback"
-        },
-        {
-          "questionId": "character_render_style",
-          "rationale": "角色/人像呈现风格",
-          "corpusFreq": null,
-          "source": "portrait-only:fallback",
-          "scopeToOption": [
-            "image_subject:single_person",
-            "image_subject:beautiful_woman",
-            "image_subject:handsome_man",
-            "image_subject:couple_portrait",
-            "image_subject:group_portrait",
-            "image_subject:game_character",
-            "image_subject:novel_character",
-            "image_subject:otome_character",
-            "image_subject:anime_character",
-            "image_subject:virtual_idol",
-            "image_subject:cosplay_character",
-            "image_subject:character_design",
-            "image_subject:silhouette_figure"
-          ]
-        }
-      ],
-      "tertiary": [],
-      "conditional": [],
-      "order": [
-        "subject",
-        "person_type",
-        "gender_presentation",
-        "framing",
-        "portrait_expression",
-        "scene",
-        "aspect_ratio",
-        "lighting",
-        "camera",
-        "character_render_style"
-      ]
     }
   ]
 };
+
+function portraitFallbackFrom(source: PrimaryTypeGradient): PrimaryTypeGradient {
+  const tagItem = (item: GradientItem): GradientItem => ({ ...item, source: "portrait-only:fallback" });
+  const tagCond = (item: ConditionalEntry): ConditionalEntry => ({ ...item, source: "portrait-only:fallback" });
+  return {
+    type: "通用",
+    essential: source.essential.map(tagItem),
+    secondary: source.secondary.map(tagItem),
+    tertiary: source.tertiary.map(tagItem),
+    conditional: source.conditional.map(tagCond),
+    order: [...source.order],
+  };
+}
+
+GRADIENT.primaryTypes.push(portraitFallbackFrom(GRADIENT.primaryTypes[0]!));

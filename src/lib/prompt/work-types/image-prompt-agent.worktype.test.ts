@@ -19,6 +19,8 @@ const PORTRAIT_DIM_EXPECTED: Record<string, number> = {
   character_archetype: 10,
   character_render_style: 8,
   character_interaction: 8,
+  makeup: 6,
+  character_props: 6,
 };
 
 const NON_PORTRAIT_DIM_IDS = [

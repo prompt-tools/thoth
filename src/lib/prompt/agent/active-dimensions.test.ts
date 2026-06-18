@@ -12,25 +12,23 @@ function firstOpt(qid: string): string {
 }
 
 describe("activeDimensions portrait-only flow", () => {
-  it("monotonicity: each answered dimension strictly reduces ordered count", () => {
+  it("each answered dimension is removed from the next ordered set", () => {
     for (const type of ["人像", "通用"]) {
       const history: AgentHistoryItem[] = [];
-      let prev = activeDimensions(type, "simple", history).ordered.length;
-
       for (let i = 0; i < 20; i++) {
-        const { ordered } = activeDimensions(type, "simple", history);
-        if (ordered.length === 0) break;
+        const { ordered, done } = activeDimensions(type, "simple", history);
+        if (done) break;
         const nextQid = ordered[0];
         history.push({ questionId: nextQid, selectedOptionIds: [firstOpt(nextQid)] });
-        const curr = activeDimensions(type, "simple", history).ordered.length;
-        expect(curr).toBeLessThan(prev);
-        prev = curr;
+        const after = activeDimensions(type, "simple", history);
+        expect(after.ordered).not.toContain(nextQid);
       }
     }
   });
 
   it("portrait close_up suppresses full-body or interaction dimensions", () => {
     const history: AgentHistoryItem[] = [
+      { questionId: "subject", selectedOptionIds: ["image_subject:beautiful_woman"] },
       { questionId: "framing", selectedOptionIds: ["image_framing:close_up"] },
     ];
     const { ordered } = activeDimensions("人像", "standard", history);
@@ -42,6 +40,7 @@ describe("activeDimensions portrait-only flow", () => {
 
   it("portrait wide_shot keeps pose/outfit/body in standard flow", () => {
     const history: AgentHistoryItem[] = [
+      { questionId: "subject", selectedOptionIds: ["image_subject:beautiful_woman"] },
       { questionId: "framing", selectedOptionIds: ["image_framing:wide_shot"] },
     ];
     const { ordered } = activeDimensions("人像", "standard", history);
@@ -76,9 +75,11 @@ describe("activeDimensions portrait-only flow", () => {
   });
 
   it("simple tier asks only five portrait-core dimensions", () => {
-    const { ordered } = activeDimensions("人像", "simple", []);
+    const afterSubject: AgentHistoryItem[] = [
+      { questionId: "subject", selectedOptionIds: ["image_subject:beautiful_woman"] },
+    ];
+    const { ordered } = activeDimensions("人像", "simple", afterSubject);
     expect(ordered).toEqual([
-      "subject",
       "person_type",
       "gender_presentation",
       "framing",
@@ -97,6 +98,7 @@ describe("activeDimensions portrait-only flow", () => {
 
   it("standard tier asks hair/outfit/pose before art_style and mood when framing allows", () => {
     const history: AgentHistoryItem[] = [
+      { questionId: "subject", selectedOptionIds: ["image_subject:beautiful_woman"] },
       { questionId: "framing", selectedOptionIds: ["image_framing:medium_shot"] },
     ];
     const { ordered } = activeDimensions("人像", "standard", history);
@@ -116,6 +118,7 @@ describe("activeDimensions portrait-only flow", () => {
 
   it("close_up keeps hair early but suppresses pose and outfit", () => {
     const history: AgentHistoryItem[] = [
+      { questionId: "subject", selectedOptionIds: ["image_subject:beautiful_woman"] },
       { questionId: "framing", selectedOptionIds: ["image_framing:close_up"] },
     ];
     const { ordered } = activeDimensions("人像", "standard", history);
@@ -132,6 +135,39 @@ describe("activeDimensions portrait-only flow", () => {
     const generic = activeDimensions("通用", "simple", []);
     expect(ordered).toEqual(generic.ordered);
     expect(ordered).toContain("subject");
+    expect(ordered).not.toContain("person_type");
+  });
+
+  it("hides subject-scoped dimensions until subject is answered", () => {
+    const { ordered } = activeDimensions("人像", "simple", []);
+    expect(ordered).toEqual(["subject", "framing"]);
+  });
+
+  it("filters fictional-only dimensions for real-person subjects", () => {
+    const history: AgentHistoryItem[] = [
+      { questionId: "subject", selectedOptionIds: ["image_subject:beautiful_woman"] },
+    ];
+    const { ordered } = activeDimensions("人像", "detailed", history);
+    expect(ordered).not.toContain("character_archetype");
+    expect(ordered).not.toContain("character_props");
     expect(ordered).toContain("person_type");
+  });
+
+  it("keeps fictional dimensions for game_character subjects", () => {
+    const history: AgentHistoryItem[] = [
+      { questionId: "subject", selectedOptionIds: ["image_subject:game_character"] },
+    ];
+    const { ordered } = activeDimensions("人像", "detailed", history);
+    expect(ordered).toContain("character_archetype");
+    expect(ordered).toContain("character_props");
+  });
+
+  it("generic fallback mirrors portrait detailed dimensions", () => {
+    const history: AgentHistoryItem[] = [
+      { questionId: "subject", selectedOptionIds: ["image_subject:game_character"] },
+    ];
+    const portrait = activeDimensions("人像", "detailed", history).ordered;
+    const generic = activeDimensions("通用", "detailed", history).ordered;
+    expect(generic).toEqual(portrait);
   });
 });

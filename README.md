@@ -51,7 +51,7 @@ npm run dev
 - 人物方向 — 真人写真、漂亮女生、漂亮男生、游戏角色、小说人物、乙游/视觉小说、二次元、虚拟偶像/OC、cosplay
 - 身份特征 — 性别呈现、年龄段、肤色/肤质、脸型/五官、体型/身形
 - 角色设计 — 角色原型、角色呈现风格、虚构角色身份气质
-- 服饰动作 — 表情、姿态、服装、发型、动作/互动、手持道具或 POV 关系
+- 服饰动作 — 表情、姿态、服装、发型、妆容、动作/互动、手持道具
 
 产品、动物、建筑、食物、风景等不再作为主体分支；它们只能作为背景、道具或场景元素出现。
 
@@ -65,6 +65,7 @@ Next.js 15 · TypeScript 5.7 · React 19 · Tailwind CSS v3 · Vitest 4。部署
 npm run dev
 npm run verify   # typecheck + lint + test + build
 npm run eval -- --provider deepseek --dry-run --max-runs 2  # 需 CIPG_EVAL_API_KEY
+npm run analyze-prompts -- path/to/prompts.txt              # Excel 先导出为 txt
 npm test
 npm run typecheck
 npm run build

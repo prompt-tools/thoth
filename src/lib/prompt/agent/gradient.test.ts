@@ -10,7 +10,7 @@ const VALID_IDS = new Set([
   "camera", "pose", "outfit", "hair", "portrait_expression",
   "person_type", "gender_presentation", "age_band", "skin_tone",
   "face_features", "body_type", "character_archetype",
-  "character_render_style", "character_interaction",
+  "character_render_style", "character_interaction", "makeup", "character_props",
 ]);
 
 const NON_PORTRAIT_IDS = new Set([

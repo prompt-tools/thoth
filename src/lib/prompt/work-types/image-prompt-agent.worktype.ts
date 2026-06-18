@@ -209,6 +209,28 @@ const phaseBQuestions: QuestionSchema[] = [
     scopeToOption: PORTRAIT_SUBJECT_SCOPE
   },
   {
+    id: "makeup",
+    version: "0.1.0",
+    title: { zh: "妆容", en: "Makeup" },
+    helper: { zh: "特写/半身人像的妆面风格；找不到合适的可直接输入。", en: "Makeup style for close-up or medium portraits; type your own if none fit." },
+    mode: "single",
+    level: "advanced",
+    required: false,
+    optionSetId: "image_makeup",
+    scopeToOption: PORTRAIT_SUBJECT_SCOPE
+  },
+  {
+    id: "character_props",
+    version: "0.1.0",
+    title: { zh: "手持道具", en: "Character props" },
+    helper: { zh: "剑、法杖、书卷、麦克风等角色道具。", en: "Swords, staffs, books, microphones, and other character props." },
+    mode: "single",
+    level: "advanced",
+    required: false,
+    optionSetId: "image_character_props",
+    scopeToOption: FICTIONAL_CHARACTER_SCOPE
+  },
+  {
     id: "portrait_expression",
     version: "0.1.0",
     title: { zh: "人物表情", en: "Portrait expression" },
