@@ -55,7 +55,7 @@ describe("computeFillSet (A3)", () => {
     expect(fill.length).toBeGreaterThan(0);
     expect(fill.length).toBeLessThanOrEqual(4);
 
-    const essentialIds = ["subject", "person_type", "gender_presentation", "framing", "scene", "portrait_expression"];
+    const essentialIds = ["subject", "person_type", "gender_presentation", "framing", "portrait_expression"];
     for (const eid of essentialIds) {
       expect(fill).not.toContain(eid);
     }

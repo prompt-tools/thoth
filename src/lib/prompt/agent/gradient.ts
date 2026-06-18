@@ -46,12 +46,7 @@ export interface GradientData {
 
 export const GRADIENT: GradientData = {
   "shared": {
-    "essential": [
-      {
-        "questionId": "aspect_ratio",
-        "source": "audit:always"
-      }
-    ],
+    "essential": [],
     "tertiary": [
       {
         "questionId": "detail_level",
@@ -122,12 +117,6 @@ export const GRADIENT: GradientData = {
           "source": "audit:always"
         },
         {
-          "questionId": "scene",
-          "rationale": "场景/背景",
-          "corpusFreq": 860,
-          "source": "audit:always"
-        },
-        {
           "questionId": "portrait_expression",
           "rationale": "人物表情/神态是人像和角色图核心",
           "corpusFreq": null,
@@ -150,6 +139,18 @@ export const GRADIENT: GradientData = {
         }
       ],
       "secondary": [
+        {
+          "questionId": "scene",
+          "rationale": "场景/背景（简单模式由自动补全承担）",
+          "corpusFreq": 860,
+          "source": "audit:always"
+        },
+        {
+          "questionId": "aspect_ratio",
+          "rationale": "画幅比例（标准精度起问）",
+          "corpusFreq": null,
+          "source": "audit:always"
+        },
         {
           "questionId": "age_band",
           "rationale": "年龄段影响真实人像、小说人物和角色设定的可信度",
@@ -480,6 +481,7 @@ export const GRADIENT: GradientData = {
         "framing",
         "portrait_expression",
         "scene",
+        "aspect_ratio",
         "age_band",
         "face_features",
         "skin_tone",
@@ -577,15 +579,21 @@ export const GRADIENT: GradientData = {
             "image_subject:character_design",
             "image_subject:silhouette_figure"
           ]
-        },
-        {
-          "questionId": "scene",
-          "rationale": "人像背景/场景",
-          "corpusFreq": 860,
-          "source": "portrait-only:fallback"
         }
       ],
       "secondary": [
+        {
+          "questionId": "scene",
+          "rationale": "人像背景/场景（简单模式由自动补全承担）",
+          "corpusFreq": 860,
+          "source": "portrait-only:fallback"
+        },
+        {
+          "questionId": "aspect_ratio",
+          "rationale": "画幅比例（标准精度起问）",
+          "corpusFreq": null,
+          "source": "portrait-only:fallback"
+        },
         {
           "questionId": "lighting",
           "rationale": "人像光线",
@@ -629,6 +637,7 @@ export const GRADIENT: GradientData = {
         "framing",
         "portrait_expression",
         "scene",
+        "aspect_ratio",
         "lighting",
         "camera",
         "character_render_style"

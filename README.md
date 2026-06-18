@@ -64,6 +64,7 @@ Next.js 15 · TypeScript 5.7 · React 19 · Tailwind CSS v3 · Vitest 4。部署
 ```bash
 npm run dev
 npm run verify   # typecheck + lint + test + build
+npm run eval -- --provider deepseek --dry-run --max-runs 2  # 需 CIPG_EVAL_API_KEY
 npm test
 npm run typecheck
 npm run build

@@ -90,7 +90,7 @@ describe("gradient data integrity", () => {
     expect(essIds).toContain("person_type");
     expect(essIds).toContain("gender_presentation");
     expect(essIds).toContain("portrait_expression");
-    expect(essIds).toContain("scene");
+    expect(essIds).not.toContain("scene");
     for (const id of [...generic!.order, ...essIds]) {
       expect(NON_PORTRAIT_IDS.has(id)).toBe(false);
     }

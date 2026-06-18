@@ -75,6 +75,26 @@ describe("activeDimensions portrait-only flow", () => {
     expect(finalResult.done).toBe(true);
   });
 
+  it("simple tier asks only five portrait-core dimensions", () => {
+    const { ordered } = activeDimensions("人像", "simple", []);
+    expect(ordered).toEqual([
+      "subject",
+      "person_type",
+      "gender_presentation",
+      "framing",
+      "portrait_expression",
+    ]);
+  });
+
+  it("aspect_ratio and scene enter at standard precision", () => {
+    const simple = activeDimensions("人像", "simple", []).ordered;
+    expect(simple).not.toContain("aspect_ratio");
+    expect(simple).not.toContain("scene");
+    const standard = activeDimensions("人像", "standard", []).ordered;
+    expect(standard).toContain("aspect_ratio");
+    expect(standard).toContain("scene");
+  });
+
   it("unknown type falls back to 通用 portrait flow", () => {
     const { ordered } = activeDimensions("不存在的类型", "simple", []);
     const generic = activeDimensions("通用", "simple", []);
