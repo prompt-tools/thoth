@@ -28,7 +28,7 @@ function flag(name, fallback) {
 }
 const PROVIDER_ID = flag("provider", "deepseek");
 const MAX_RUNS = Number(flag("max-runs", "4"));
-const MAX_TURNS = Number(flag("max-turns", "10"));
+const MAX_TURNS = Number(flag("max-turns", PRECISION === "detailed" ? "18" : "10"));
 const WORKERS = Number(flag("workers", "4"));
 const SEED_FILE = flag("seeds", ".research/eval-seeds/seeds.txt");
 const BASE_SEED = Number(flag("seed", "42"));
