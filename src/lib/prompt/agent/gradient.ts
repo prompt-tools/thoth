@@ -50,10 +50,6 @@ export const GRADIENT: GradientData = {
       {
         "questionId": "aspect_ratio",
         "source": "audit:always"
-      },
-      {
-        "questionId": "constraints",
-        "source": "audit:always"
       }
     ],
     "tertiary": [

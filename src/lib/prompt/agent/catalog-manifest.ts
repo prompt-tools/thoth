@@ -47,6 +47,9 @@ function buildPortraitQuestionIdSet(): Set<string> {
 
 const PORTRAIT_QUESTION_IDS = buildPortraitQuestionIdSet();
 
+/** Applied automatically at render time — never surfaced as an agent question. */
+const AGENT_HIDDEN_QUESTION_IDS = new Set(["constraints"]);
+
 /**
  * The public product is portrait-only. Always return the people category so
  * fallback paths and empty descriptions never leak product/animal/food subjects.
@@ -96,6 +99,7 @@ export function buildCatalogManifest(): CatalogManifest {
   for (const question of imagePromptAgentWorkType.questions) {
     if (!question.optionSetId) continue;
     if (!PORTRAIT_QUESTION_IDS.has(question.id)) continue;
+    if (AGENT_HIDDEN_QUESTION_IDS.has(question.id)) continue;
     const rawOptions = getOptionsForTarget(question.optionSetId, IMAGE_TARGET_ID).filter((option) => {
       if (question.id === "use_case") return PORTRAIT_USE_CASE_IDS.has(option.id);
       if (question.id === "art_style") return !BLOCKED_ART_STYLE_IDS.has(option.id);

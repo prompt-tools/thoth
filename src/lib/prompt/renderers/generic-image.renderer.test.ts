@@ -163,11 +163,6 @@ describe("portrait E2E renderer samples", () => {
         portrait_expression: ["image_portrait_expression:tender"],
         framing: ["image_framing:medium_shot"],
         lighting: ["image_lighting:golden_hour"],
-        constraints: [
-          "image_constraints:no_plastic_skin",
-          "image_constraints:no_extra_fingers",
-          "image_constraints:no_distorted_face",
-        ],
       },
     });
     expect(rendered.zhPrompt).toContain("海边回眸的漂亮女生，胶片感");

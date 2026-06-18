@@ -21,7 +21,9 @@ export const genericImageTarget: TemplateTargetConfig = {
     "image_constraints:no_bad_anatomy",
     "image_constraints:no_low_quality",
     "image_constraints:no_distorted_face",
-    "image_constraints:no_plastic_skin"
+    "image_constraints:no_extra_limbs",
+    "image_constraints:no_extra_fingers",
+    "image_constraints:no_plastic_skin",
   ],
   supportedWorkTypes: ["image_prompt"],
   templateMap: {

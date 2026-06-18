@@ -99,4 +99,11 @@ describe("gradient data integrity", () => {
   it("primary types are reduced to portrait and portrait fallback", () => {
     expect(GRADIENT.primaryTypes.map((p) => p.type).sort()).toEqual(["人像", "通用"]);
   });
+
+  it("constraints are not agent-askable (automatic at render time)", () => {
+    const sharedEssential = GRADIENT.shared.essential.map((x) => x.questionId);
+    expect(sharedEssential).not.toContain("constraints");
+    const manifestIds = buildCatalogManifest().map((d) => d.questionId);
+    expect(manifestIds).not.toContain("constraints");
+  });
 });

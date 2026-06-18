@@ -91,7 +91,7 @@ export function activeDimensions(
   const orderSet = new Set(t.order);
   const ordered: string[] = [];
 
-  // Append aspect_ratio/constraints (shared.essential) to order if not already in type order
+  // Append shared.essential (e.g. aspect_ratio) to order if not already in type order
   const fullOrder = [...t.order];
   for (const item of gradient.shared.essential) {
     if (!orderSet.has(item.questionId)) fullOrder.push(item.questionId);
