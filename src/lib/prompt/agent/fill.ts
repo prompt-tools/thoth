@@ -10,6 +10,7 @@ import {
 import { resolveActiveSet } from "./active-dimensions";
 import type { AgentHistoryItem } from "./decision";
 import type { CatalogManifest } from "./catalog-manifest";
+import { boostFillCandidates } from "./fill-boost";
 
 /**
  * Compute which secondary dimensions to auto-fill.
@@ -26,6 +27,7 @@ export function computeFillSet(
   manifest: CatalogManifest,
   cap = 4,
   gradient = GRADIENT,
+  userDescription?: string,
 ): string[] {
   const t =
     gradient.primaryTypes.find((p) => p.type === type) ??
@@ -72,5 +74,6 @@ export function computeFillSet(
     return ia - ib;
   });
 
-  return fillCandidates.slice(0, cap);
+  const boosted = boostFillCandidates(fillCandidates, userDescription);
+  return boosted.slice(0, cap);
 }

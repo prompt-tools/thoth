@@ -92,6 +92,32 @@ describe("computeFillSet (A3)", () => {
     expect(fill1.length).toBeLessThanOrEqual(1);
   });
 
+  it("boosts hair into the fill cap when the seed mentions silver hair", () => {
+    const history: AgentHistoryItem[] = [
+      { questionId: "subject", selectedOptionIds: ["image_subject:game_character"] },
+      { questionId: "person_type", selectedOptionIds: ["image_person_type:game_character"] },
+      { questionId: "gender_presentation", selectedOptionIds: ["image_gender_presentation:masculine"] },
+      { questionId: "framing", selectedOptionIds: ["image_framing:medium_shot"] },
+      { questionId: "portrait_expression", selectedOptionIds: ["image_portrait_expression:confident"] },
+    ];
+    const plain = computeFillSet("人像", history, manifest, 4);
+    const boosted = computeFillSet("人像", history, manifest, 4, undefined, "银发剑士游戏立绘");
+    expect(plain).not.toContain("hair");
+    expect(boosted).toContain("hair");
+  });
+
+  it("boosts render style when the seed mentions otome", () => {
+    const history: AgentHistoryItem[] = [
+      { questionId: "subject", selectedOptionIds: ["image_subject:otome_character"] },
+      { questionId: "person_type", selectedOptionIds: ["image_person_type:otome_visual_novel"] },
+      { questionId: "gender_presentation", selectedOptionIds: ["image_gender_presentation:masculine"] },
+      { questionId: "framing", selectedOptionIds: ["image_framing:close_up"] },
+      { questionId: "portrait_expression", selectedOptionIds: ["image_portrait_expression:tender"] },
+    ];
+    const boosted = computeFillSet("人像", history, manifest, 4, undefined, "乙游男主 POV 心动对视");
+    expect(boosted).toContain("character_render_style");
+  });
+
   it("returns empty for types with no secondary remaining", () => {
     const fill = computeFillSet("通用", [], manifest);
     expect(fill.length).toBeLessThanOrEqual(4);

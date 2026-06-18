@@ -270,7 +270,7 @@ export function useAgentGuideController() {
           // or when fillSet is empty
           if (precisionRef.current !== "detailed") {
             const type = routePrimaryType(descriptionRef.current);
-            const fillSet = computeFillSet(type, nextHistory, manifest);
+            const fillSet = computeFillSet(type, nextHistory, manifest, 4, undefined, descriptionRef.current);
 
             if (fillSet.length > 0) {
               logAgent("autofill", { fillSet, type, precision: precisionRef.current });
@@ -503,7 +503,7 @@ export function useAgentGuideController() {
 
     if (precisionRef.current !== "detailed") {
       const type = routePrimaryType(descriptionRef.current);
-      const fillSet = computeFillSet(type, history, manifest);
+      const fillSet = computeFillSet(type, history, manifest, 4, undefined, descriptionRef.current);
       if (fillSet.length > 0) {
         try {
           const fillResults = await autoFillDimensions(

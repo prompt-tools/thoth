@@ -370,7 +370,7 @@ async function runOne(runId, seedValue, description) {
   // P1-E2 fix: skip auto-fill on fallbackGiveUp (matches controller behavior)
   if (PRECISION !== "detailed" && terminationReason !== "error" && terminationReason !== "fallbackGiveUp") {
     const type = routePrimaryType(description);
-    const fillSet = computeFillSet(type, history, manifest);
+    const fillSet = computeFillSet(type, history, manifest, 4, undefined, description);
 
     if (fillSet.length > 0) {
       try {
