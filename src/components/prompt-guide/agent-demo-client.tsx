@@ -159,7 +159,7 @@ function DescribeStep({
       <PrecisionSelector value={precision} onChange={onPrecisionChange} />
       <h2 className="mt-4 text-base font-semibold text-slate-950">用一句话说说你想要的人物或角色</h2>
       <p className="mt-1 text-sm leading-6 text-slate-600">
-        随便说，比如「海边回眸的女生，胶片感」或「乙游男主牵手 POV」。若描述的是产品、动物或纯风景，请改写成人物/角色场景；AI 会据此决定先问哪些维度。画质与安全负向词会自动写入最终 prompt，无需单独选择。
+        随便说，比如「海边回眸的女生，胶片感」或「乙游男主牵手 POV」。若描述的是产品、动物或纯风景，请改写成人物/角色场景；AI 会据此决定先问哪些维度。画质负向词与未成年保护会自动写入最终 prompt，无需单独选择。
       </p>
       <textarea
         value={text}
@@ -347,7 +347,7 @@ function AgentDemo() {
             AI 帮你生成可控人像提示词
           </h1>
           <p className="max-w-3xl text-sm leading-6 text-slate-600">
-            只服务人物、人像和角色生成：AI 根据你已有的选择，动态决定下一题与该题的候选选项。最终提示词由选项确定性拼接；画质与安全负向词自动附加。
+            只服务人物、人像和角色生成：AI 根据你已有的选择，动态决定下一题与该题的候选选项。最终提示词由选项确定性拼接；画质负向词与未成年保护自动附加。
           </p>
           <p className="text-xs text-slate-500">
             <Link href="/" className="text-teal-700 hover:underline">

@@ -129,7 +129,7 @@ describe("prompt configuration validation (image-only)", () => {
     expect(errors[0]).toContain("nonexistent_option");
   });
 
-  it("warns when safety defaults are deselected from generic_image output (TEST-08)", () => {
+  it("appends automatic quality and minor-protection negatives (TEST-08)", () => {
     const result = renderPrompt({
       workType: imageWorkType,
       rawIntent: "",
@@ -139,8 +139,9 @@ describe("prompt configuration validation (image-only)", () => {
       },
     });
 
-    expect(result.zhPrompt).toContain("避免名人肖像和受版权保护的角色形象");
-    expect(result.zhPrompt).toContain("避免过度磨皮、塑料感和蜡像质感");
+    expect(result.zhPrompt).toContain("避免未成年或青少年角色的性感化");
+    expect(result.zhPrompt).toContain("避免畸形、多余肢体和面部扭曲");
+    expect(result.zhPrompt).not.toContain("避免名人肖像");
     expect(result.warnings.some((w) => w.zh.includes("已取消预选的安全约束"))).toBe(false);
   });
 

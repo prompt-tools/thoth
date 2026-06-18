@@ -36,8 +36,8 @@ npm run dev
 3. Dimensions you skip are **auto-filled** to match your chosen style (editable in
    the result).
 4. The final prompt is **deterministically stitched** from your selected options —
-   no AI rewriting of meaning. Quality and safety negatives are **appended
-   automatically** — no separate step. Outputs Chinese + English prompts.
+   no AI rewriting of meaning. Quality negatives and minor-protection constraints
+   are **appended automatically** — no separate step. Outputs Chinese + English prompts.
 
 Two precision tiers: **Simple** (a few core questions) / **Pro** (asks more, with a
 per-question "show all options" disclosure).
@@ -62,7 +62,7 @@ records each step for analysis.
 
 **Retained visual dimensions:** use case · portrait subject · scene · composition · lighting · art style · color · mood · framing · camera angle · aspect ratio · detail · post-processing
 
-**Automatic (not asked):** quality and safety negatives (bad anatomy, low quality, distorted face, extra fingers, plastic skin, IP/NSFW, etc.)
+**Automatic (not asked):** quality negatives (bad anatomy, low quality, distorted face, extra fingers, plastic skin, etc.) + no sexualized minors
 
 **Portrait-specific dimensions:**
 - Portrait direction — realistic portrait, beautiful woman, handsome man, game character, novel character, otome/visual novel, anime, virtual idol/OC, cosplay

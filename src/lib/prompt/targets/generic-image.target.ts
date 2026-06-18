@@ -9,14 +9,12 @@ export const genericImageTarget: TemplateTargetConfig = {
     en: "A portrait and character image prompt that avoids platform-specific syntax. Outputs comma-separated natural language keyword phrases."
   },
   adaptationNote: {
-    zh: "已按通用图片模型的人像/角色生成优化：优先组织人物身份、脸部/肤质、表情、服饰、动作、场景、镜头、光线和风格。画质与安全负向词在最终 prompt 中自动附加，无需单独选择。不含模型特定参数（如 --ar, --stylize 等）。",
-    en: "Optimized for portrait and character generation on generic image models: character identity, face/skin, expression, outfit, action, scene, camera, lighting, and style. Quality and safety negatives are appended automatically — no separate step. No model-specific parameters (--ar, --stylize, etc.)."
+    zh: "已按通用图片模型的人像/角色生成优化：优先组织人物身份、脸部/肤质、表情、服饰、动作、场景、镜头、光线和风格。画质负向词与未成年保护约束在最终 prompt 中自动附加，无需单独选择。不含模型特定参数（如 --ar, --stylize 等）。",
+    en: "Optimized for portrait and character generation on generic image models: character identity, face/skin, expression, outfit, action, scene, camera, lighting, and style. Quality negatives and minor-protection constraints are appended automatically — no separate step. No model-specific parameters (--ar, --stylize, etc.)."
   },
   prefer: ["use_case", "subject", "framing", "portrait_expression", "scene", "lighting", "art_style", "color_palette", "mood", "constraints"],
   suppress: [],
   safetyDefaults: [
-    "image_constraints:no_ip_celebrity",
-    "image_constraints:no_nsfw",
     "image_constraints:no_sexualized_minors",
     "image_constraints:no_bad_anatomy",
     "image_constraints:no_low_quality",
