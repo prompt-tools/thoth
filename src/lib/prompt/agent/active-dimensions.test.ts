@@ -95,6 +95,38 @@ describe("activeDimensions portrait-only flow", () => {
     expect(standard).toContain("scene");
   });
 
+  it("standard tier asks hair/outfit/pose before art_style and mood when framing allows", () => {
+    const history: AgentHistoryItem[] = [
+      { questionId: "framing", selectedOptionIds: ["image_framing:medium_shot"] },
+    ];
+    const { ordered } = activeDimensions("人像", "standard", history);
+    const hairIdx = ordered.indexOf("hair");
+    const outfitIdx = ordered.indexOf("outfit");
+    const poseIdx = ordered.indexOf("pose");
+    const moodIdx = ordered.indexOf("mood");
+    const artIdx = ordered.indexOf("art_style");
+    expect(hairIdx).toBeGreaterThan(-1);
+    expect(outfitIdx).toBeGreaterThan(-1);
+    expect(poseIdx).toBeGreaterThan(-1);
+    expect(hairIdx).toBeLessThan(moodIdx);
+    expect(outfitIdx).toBeLessThan(moodIdx);
+    expect(poseIdx).toBeLessThan(moodIdx);
+    expect(hairIdx).toBeLessThan(artIdx);
+  });
+
+  it("close_up keeps hair early but suppresses pose and outfit", () => {
+    const history: AgentHistoryItem[] = [
+      { questionId: "framing", selectedOptionIds: ["image_framing:close_up"] },
+    ];
+    const { ordered } = activeDimensions("人像", "standard", history);
+    expect(ordered).toContain("hair");
+    expect(ordered).not.toContain("pose");
+    expect(ordered).not.toContain("outfit");
+    const hairIdx = ordered.indexOf("hair");
+    const artIdx = ordered.indexOf("art_style");
+    expect(hairIdx).toBeLessThan(artIdx);
+  });
+
   it("unknown type falls back to 通用 portrait flow", () => {
     const { ordered } = activeDimensions("不存在的类型", "simple", []);
     const generic = activeDimensions("通用", "simple", []);

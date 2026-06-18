@@ -320,6 +320,7 @@ function AgentDemo() {
     precision,
     setPrecision,
     autoFilledSummary,
+    builtinDemo,
   } = useAgentGuideController();
 
   if (phase === "needsKey") {
@@ -341,7 +342,11 @@ function AgentDemo() {
           <div className="flex flex-wrap items-center gap-2 text-sm font-medium text-slate-600">
             <Sparkles className="h-4 w-4" />
             人像/角色自适应向导
-            <span className="rounded-md bg-indigo-50 px-2 py-0.5 text-xs text-indigo-800">BYOK</span>
+            {builtinDemo ? (
+              <span className="rounded-md bg-emerald-50 px-2 py-0.5 text-xs text-emerald-800">内置模型</span>
+            ) : (
+              <span className="rounded-md bg-indigo-50 px-2 py-0.5 text-xs text-indigo-800">BYOK</span>
+            )}
           </div>
           <h1 className="text-2xl font-semibold tracking-normal md:text-3xl">
             AI 帮你生成可控人像提示词
@@ -350,16 +355,21 @@ function AgentDemo() {
             只服务人物、人像和角色生成：AI 根据你已有的选择，动态决定下一题与该题的候选选项。最终提示词由选项确定性拼接；画质负向词与未成年保护自动附加。
           </p>
           <p className="text-xs text-slate-500">
-            <Link href="/" className="text-teal-700 hover:underline">
-              ← 返回线上版
-            </Link>
-            {" · "}
-            服务商：{provider.label}
-            {" · "}
-            <button type="button" onClick={reconfigure} className="text-teal-700 hover:underline">
-              切换
-            </button>
-            {" · "}
+            {builtinDemo ? (
+              <>
+                模型：DeepSeek（内置，无需 API Key）
+                {" · "}
+              </>
+            ) : (
+              <>
+                服务商：{provider.label}
+                {" · "}
+                <button type="button" onClick={reconfigure} className="text-teal-700 hover:underline">
+                  切换
+                </button>
+                {" · "}
+              </>
+            )}
             目录维度：{manifest.length}
           </p>
         </header>

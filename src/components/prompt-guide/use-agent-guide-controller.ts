@@ -25,6 +25,8 @@ function selectedOptionIds(selections: PromptSelections): string[] {
 const PROVIDER_STORAGE = "cipg.agentDemo.provider";
 const keyStorageFor = (providerId: string) => `cipg.agentDemo.key.${providerId}`;
 
+const BUILTIN_DEMO = process.env.NEXT_PUBLIC_AGENT_DEMO_BUILTIN === "1";
+
 type Phase = "needsKey" | "describe" | "asking" | "done";
 
 function readStorage(key: string): string {
@@ -62,9 +64,7 @@ export function useAgentGuideController() {
   // values are hydrated in an effect after mount (below).
   const [providerId, setProviderId] = useState<string>(DEFAULT_PROVIDER_ID);
   const [apiKey, setApiKey] = useState<string>("");
-  const [phase, setPhase] = useState<Phase>(
-    process.env.NEXT_PUBLIC_AGENT_DEMO_BUILTIN === "1" ? "describe" : "needsKey",
-  );
+  const [phase, setPhase] = useState<Phase>(BUILTIN_DEMO ? "describe" : "needsKey");
 
   const [description, setDescription] = useState("");
   const descriptionRef = useRef("");
@@ -139,7 +139,7 @@ export function useAgentGuideController() {
     // Built-in demo mode (public deploy): skip the BYOK gate. Use deepseek with a sentinel
     // key; the /api/llm server route injects the real server-side key. The real key is never
     // in the browser.
-    if (process.env.NEXT_PUBLIC_AGENT_DEMO_BUILTIN === "1") {
+    if (BUILTIN_DEMO) {
       setProviderId("deepseek");
       providerRef.current = "deepseek";
       keyRef.current = "__demo__";
@@ -573,6 +573,7 @@ export function useAgentGuideController() {
   const reconfigure = useCallback(() => {
     sessionRef.current++; // void any in-flight fetch
     logAgent("reconfigure");
+    if (BUILTIN_DEMO) return;
     setPhase("needsKey");
   }, []);
 
@@ -599,6 +600,7 @@ export function useAgentGuideController() {
     precision,
     setPrecision: (p: Precision) => { precisionRef.current = p; setPrecision(p); },
     primaryType,
+    builtinDemo: BUILTIN_DEMO,
     readKeyFor: (id: string) => readStorage(keyStorageFor(id)),
     saveKeyAndStart,
     startWithDescription,

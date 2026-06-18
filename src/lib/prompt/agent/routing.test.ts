@@ -33,6 +33,21 @@ describe("suggestedIdsFromDescription", () => {
     );
   });
 
+  it("suggests game_character from warrior and mecha cues without explicit 游戏", () => {
+    expect(suggestedIdsFromDescription("银发剑士", "人像")).toEqual(
+      new Set(["image_subject:game_character"])
+    );
+    expect(suggestedIdsFromDescription("机甲少女战斗立绘", "人像")).toEqual(
+      new Set(["image_subject:game_character"])
+    );
+  });
+
+  it("suggests character_design from sheet and turnaround cues", () => {
+    expect(suggestedIdsFromDescription("原创角色设定三视图", "人像")).toEqual(
+      new Set(["image_subject:character_design"])
+    );
+  });
+
   it("does not suggest non-portrait subjects", () => {
     expect(suggestedIdsFromDescription("一只橘猫", "人像")).toEqual(new Set());
     expect(suggestedIdsFromDescription("白底耳机产品图", "人像")).toEqual(new Set());

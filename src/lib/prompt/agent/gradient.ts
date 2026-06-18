@@ -484,6 +484,10 @@ export const GRADIENT: GradientData = {
         "aspect_ratio",
         "age_band",
         "face_features",
+        "hair",
+        "outfit",
+        "pose",
+        "body_type",
         "skin_tone",
         "lighting",
         "camera",
@@ -494,10 +498,6 @@ export const GRADIENT: GradientData = {
         "color_palette",
         "art_style",
         "mood",
-        "pose",
-        "outfit",
-        "hair",
-        "body_type",
         "composition",
         "post_processing"
       ]
