@@ -36,7 +36,8 @@ npm run dev
 3. Dimensions you skip are **auto-filled** to match your chosen style (editable in
    the result).
 4. The final prompt is **deterministically stitched** from your selected options —
-   no AI rewriting of meaning. Outputs Chinese + English prompts.
+   no AI rewriting of meaning. Quality and safety negatives are **appended
+   automatically** — no separate step. Outputs Chinese + English prompts.
 
 Two precision tiers: **Simple** (a few core questions) / **Pro** (asks more, with a
 per-question "show all options" disclosure).
@@ -59,7 +60,9 @@ records each step for analysis.
 
 ## Portrait Dimensions
 
-**Retained visual dimensions:** use case · portrait subject · scene · composition · lighting · art style · color · mood · framing · camera angle · aspect ratio · detail · post-processing · constraints
+**Retained visual dimensions:** use case · portrait subject · scene · composition · lighting · art style · color · mood · framing · camera angle · aspect ratio · detail · post-processing
+
+**Automatic (not asked):** quality and safety negatives (bad anatomy, low quality, distorted face, extra fingers, plastic skin, IP/NSFW, etc.)
 
 **Portrait-specific dimensions:**
 - Portrait direction — realistic portrait, beautiful woman, handsome man, game character, novel character, otome/visual novel, anime, virtual idol/OC, cosplay
@@ -74,7 +77,8 @@ Products, animals, architecture, food, and landscapes no longer exist as subject
 | Repo | Purpose |
 |------|---------|
 | **thoth** (this repo) | Production app on Vercel |
-| **[controllable-image-prompt-guide](https://github.com/prompt-tools/controllable-image-prompt-guide)** | Dev + eval repo: feature branches and SCSI evaluation pipeline |
+| **[controllable-image-prompt-guide](https://github.com/prompt-tools/controllable-image-prompt-guide)** | Dev + eval repo: agent eval harness |
+| **[cipg-eval-test](https://github.com/prompt-tools/cipg-eval-test)** | Private eval bed: GitHub Actions + DeepSeek scheduled runs |
 
 ## License
 

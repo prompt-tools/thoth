@@ -3,9 +3,9 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://controllable-image-prompt-guide.vercel.app"),
+  metadataBase: new URL("https://thoth-rho.vercel.app"),
   title: "人像/角色提示词向导",
-  description: "选择题式人像与角色提示词生成向导，面向非专业用户的图片生成提示词工具"
+  description: "选择题式人像与角色提示词生成向导。画质与安全负向词自动附加，无需单独选择。"
 };
 
 export default function RootLayout({

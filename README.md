@@ -30,7 +30,7 @@ npm run dev
 1. 用一句话说说你想要的人物或角色(也可以跳过)。
 2. AI 根据你已有的选择,**动态决定下一题**和该题的候选选项——而不是一次性铺开所有选择题。
 3. 你没回答的维度,AI 会据你已选的风格**自动补全**(可在结果里删改)。
-4. 最终提示词由你选中的选项**确定性拼接**生成,不靠 AI 改写语义。输出中文 / 英文 prompt。
+4. 最终提示词由你选中的选项**确定性拼接**生成,不靠 AI 改写语义。画质与安全负向词**自动附加**,无需单独选择。输出中文 / 英文 prompt。
 
 精细度两档:**简单**(只问几个核心问题)/ **专业**(问得更全,每题可展开全部选项)。
 
@@ -43,7 +43,9 @@ npm run dev
 
 ## 人像维度
 
-**保留的视觉维度：** 用途 · 人物主体 · 场景 · 构图 · 光线 · 画风 · 色调 · 氛围 · 景别 · 机位 · 比例 · 细节 · 后期 · 约束
+**保留的视觉维度：** 用途 · 人物主体 · 场景 · 构图 · 光线 · 画风 · 色调 · 氛围 · 景别 · 机位 · 比例 · 细节 · 后期
+
+**自动附加（不提问）：** 画质与安全负向词（畸形、低画质、面部扭曲、多手指、塑料磨皮、IP/NSFW 等）
 
 **人物专属维度：**
 - 人物方向 — 真人写真、漂亮女生、漂亮男生、游戏角色、小说人物、乙游/视觉小说、二次元、虚拟偶像/OC、cosplay
@@ -72,7 +74,8 @@ npm run build
 | 仓库 | 内容 |
 |------|------|
 | **thoth**（本仓库） | 上线版:仅图片、AI 自适应向导 |
-| **[controllable-image-prompt-guide](https://github.com/prompt-tools/controllable-image-prompt-guide)** | 开发 + 评测仓:相同图片功能的测试分支与 SCSI 评测流水线 |
+| **[controllable-image-prompt-guide](https://github.com/prompt-tools/controllable-image-prompt-guide)** | 开发 + 评测仓: agent eval 流水线（人像 seed 见 `.research/eval-seeds/portrait-seeds.txt`） |
+| **[cipg-eval-test](https://github.com/prompt-tools/cipg-eval-test)** | 私有评测床: GitHub Actions + DeepSeek 定时 eval |
 
 ## 许可
 
