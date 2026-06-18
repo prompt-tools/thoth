@@ -17,8 +17,11 @@ export const genericImageTarget: TemplateTargetConfig = {
   safetyDefaults: [
     "image_constraints:no_ip_celebrity",
     "image_constraints:no_nsfw",
+    "image_constraints:no_sexualized_minors",
     "image_constraints:no_bad_anatomy",
-    "image_constraints:no_low_quality"
+    "image_constraints:no_low_quality",
+    "image_constraints:no_distorted_face",
+    "image_constraints:no_plastic_skin"
   ],
   supportedWorkTypes: ["image_prompt"],
   templateMap: {
@@ -48,12 +51,12 @@ export const genericImageTarget: TemplateTargetConfig = {
         en: "avoid: bad anatomy, low quality, blurry"
       },
       medium: {
-        zh: "避免：不良解剖结构、低画质、模糊、水印、文字/签名、扭曲面部、多余肢体",
-        en: "avoid: bad anatomy, low quality, blurry, watermarks, text/signatures, distorted faces, extra limbs"
+        zh: "避免：不良解剖结构、低画质、模糊、水印、文字/签名、扭曲面部、多余肢体、多手指、塑料磨皮",
+        en: "avoid: bad anatomy, low quality, blurry, watermarks, text/signatures, distorted faces, extra limbs, extra fingers, plastic over-smoothed skin"
       },
       heavy: {
-        zh: "避免：不良解剖结构、低画质、模糊、水印、文字/签名、扭曲面部、多余肢体、画面拥挤混乱、混沌背景、畸形、比例失调",
-        en: "avoid: bad anatomy, low quality, blurry, watermarks, text/signatures, distorted faces, extra limbs, cluttered composition, chaotic background, disfigured, bad proportions"
+        zh: "避免：不良解剖结构、低画质、模糊、水印、文字/签名、扭曲面部、多余肢体、多手指、塑料磨皮、画面拥挤混乱、混沌背景、畸形、比例失调",
+        en: "avoid: bad anatomy, low quality, blurry, watermarks, text/signatures, distorted faces, extra limbs, extra fingers, plastic over-smoothed skin, cluttered composition, chaotic background, disfigured, bad proportions"
       }
     }
   }

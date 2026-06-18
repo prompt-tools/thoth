@@ -325,7 +325,12 @@ export function useAgentGuideController() {
           // For the constraints question, pre-select anatomy-relevant defaults so the
           // user can submit with one tap rather than having to hunt for the option.
           const constraintsDefaults: Record<string, string[]> = {
-            "人像": ["image_constraints:no_bad_anatomy", "image_constraints:no_distorted_face"],
+            "人像": [
+              "image_constraints:no_bad_anatomy",
+              "image_constraints:no_distorted_face",
+              "image_constraints:no_extra_fingers",
+              "image_constraints:no_plastic_skin",
+            ],
           };
           const defaultConstraints =
             next.nextQuestionId === "constraints"
