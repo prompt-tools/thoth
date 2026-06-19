@@ -59,6 +59,9 @@ describe("inferSubjectOptionIds", () => {
     expect(inferSubjectOptionIds("游戏角色立绘，银发剑士", "人像")).toEqual([
       "image_subject:game_character",
     ]);
+    expect(inferSubjectOptionIds("赛博朋克女黑客半身像", "人像")).toEqual([
+      "image_subject:game_character",
+    ]);
     expect(inferSubjectOptionIds("xyz no signals", "人像")).toEqual([
       "image_subject:single_person",
     ]);

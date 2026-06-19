@@ -165,14 +165,18 @@ describe("activeDimensions portrait-only flow", () => {
     expect(ordered).toContain("person_type");
   });
 
-  it("keeps fictional dimensions for game_character subjects", () => {
+  it("P1 props: game_character gets props only when seed mentions a prop cue", () => {
     const history: AgentHistoryItem[] = [
       { questionId: "subject", selectedOptionIds: ["image_subject:game_character"] },
     ];
-    const { ordered } = activeDimensions("人像", "detailed", history);
-    expect(ordered).toContain("character_archetype");
-    expect(ordered).toContain("character_props");
-    expect(ordered).not.toContain("character_interaction");
+    expect(activeDimensions("人像", "detailed", history, GRADIENT, "游戏角色立绘").ordered).not.toContain(
+      "character_props",
+    );
+    expect(activeDimensions("人像", "detailed", history, GRADIENT, "持剑战士立绘").ordered).toContain(
+      "character_props",
+    );
+    expect(activeDimensions("人像", "detailed", history).ordered).toContain("character_archetype");
+    expect(activeDimensions("人像", "detailed", history).ordered).not.toContain("character_interaction");
   });
 
   it("P1-6: character_interaction only for otome, couple, and group subjects", () => {

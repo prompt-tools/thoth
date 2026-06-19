@@ -5,7 +5,7 @@ import {
 } from "./gradient";
 import type { AgentHistoryItem } from "./decision";
 import { buildSubjectScopedIndex } from "../renderers/generic-image.renderer";
-import { hasCameraSeed } from "./fill-boost";
+import { hasCameraSeed, hasPropSeed } from "./fill-boost";
 import { inferSubjectOptionIds } from "./routing";
 
 export const PRECISION_ORDER: Record<Precision, number> = {
@@ -110,6 +110,15 @@ export function resolveActiveSet(
   return active;
 }
 
+/** Drop handheld-props question unless the seed mentions a prop cue (P1 props noise). */
+export function applyPropsQuestionDemotion(
+  active: Set<string>,
+  userDescription?: string,
+): void {
+  if (hasPropSeed(userDescription)) return;
+  active.delete("character_props");
+}
+
 /** After framing is chosen, drop redundant camera dims unless the seed mentions lens/bokeh cues. */
 export function applyCameraQuestionDemotion(
   active: Set<string>,
@@ -144,6 +153,7 @@ export function activeDimensions(
 ): { ordered: string[]; done: boolean } {
   const active = resolveActiveSet(type, precision, history, gradient, userDescription);
   applyCameraQuestionDemotion(active, history, userDescription);
+  applyPropsQuestionDemotion(active, userDescription);
 
   // Remove already-asked
   const asked = new Set(history.map((h) => h.questionId));

@@ -65,6 +65,8 @@ Next.js 15 · TypeScript 5.7 · React 19 · Tailwind CSS v3 · Vitest 4。部署
 npm run dev
 npm run verify   # typecheck + lint + test + build
 npm run eval -- --provider deepseek --dry-run --max-runs 2  # 需 CIPG_EVAL_API_KEY
+# 可与姊妹仓共用：source ../controllable-image-prompt-guide/.env.eval
+npm run compare-corpus -- .research/out/eval/<run-dir> path/to/corpus.csv
 npm run analyze-prompts -- path/to/prompts.txt              # Excel 先导出为 txt
 npm test
 npm run typecheck

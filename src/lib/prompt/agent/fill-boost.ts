@@ -1,4 +1,8 @@
 /** Reorder autofill candidates when the user's seed mentions styling cues. */
+export const PROP_SEED_SIGNALS = [
+  "剑", "刀", "枪", "法杖", "杖", "盾", "书", "卷", "麦克风", "mic", "weapon", "sword", "staff", "shield", "手持",
+];
+
 const FILL_BOOST_RULES: { questionId: string; signals: string[] }[] = [
   {
     questionId: "hair",
@@ -30,7 +34,7 @@ const FILL_BOOST_RULES: { questionId: string; signals: string[] }[] = [
   },
   {
     questionId: "character_props",
-    signals: ["剑", "法杖", "麦克风", "盾", "sword", "staff", "shield", "weapon"],
+    signals: PROP_SEED_SIGNALS,
   },
 ];
 
@@ -60,6 +64,11 @@ function poseSignals(): string[] {
 export function hasCameraSeed(description: string | undefined): boolean {
   if (!description?.trim()) return false;
   return hasSignal(description, CAMERA_SEED_SIGNALS);
+}
+
+export function hasPropSeed(description: string | undefined): boolean {
+  if (!description?.trim()) return false;
+  return hasSignal(description, PROP_SEED_SIGNALS);
 }
 
 export function boostedQuestionIds(description: string | undefined): Set<string> {
