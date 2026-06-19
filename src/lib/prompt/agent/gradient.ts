@@ -54,7 +54,7 @@ export const GRADIENT: GradientData = {
       },
       {
         "questionId": "use_case",
-        "source": "audit:always(入口路由后)"
+        "source": "audit:catalog-only(入口路由，问卷 omit)"
       }
     ]
   },
@@ -262,19 +262,9 @@ export const GRADIENT: GradientData = {
           "corpusFreq": null,
           "source": "portrait-only:character",
           "scopeToOption": [
-            "image_subject:single_person",
-            "image_subject:beautiful_woman",
-            "image_subject:handsome_man",
             "image_subject:couple_portrait",
             "image_subject:group_portrait",
-            "image_subject:game_character",
-            "image_subject:novel_character",
-            "image_subject:otome_character",
-            "image_subject:anime_character",
-            "image_subject:virtual_idol",
-            "image_subject:cosplay_character",
-            "image_subject:character_design",
-            "image_subject:silhouette_figure"
+            "image_subject:otome_character"
           ]
         },
         {
@@ -434,12 +424,6 @@ export const GRADIENT: GradientData = {
           "rationale": "专业人像/角色图需要控制留白、主体位置和封面空间",
           "corpusFreq": 248,
           "source": "portrait-only:composition"
-        },
-        {
-          "questionId": "post_processing",
-          "rationale": "后期效果；precision=high",
-          "corpusFreq": null,
-          "source": "audit:precision=high"
         }
       ],
       "conditional": [
@@ -536,8 +520,7 @@ export const GRADIENT: GradientData = {
         "color_palette",
         "art_style",
         "mood",
-        "composition",
-        "post_processing"
+        "composition"
       ]
     }
   ]

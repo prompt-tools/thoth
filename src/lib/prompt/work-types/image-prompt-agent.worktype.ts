@@ -52,6 +52,12 @@ const PORTRAIT_SUBJECT_SCOPE = [
   "image_subject:silhouette_figure"
 ];
 
+const INTERACTION_SUBJECT_SCOPE = [
+  "image_subject:couple_portrait",
+  "image_subject:group_portrait",
+  "image_subject:otome_character",
+];
+
 const FICTIONAL_CHARACTER_SCOPE = [
   "image_subject:game_character",
   "image_subject:novel_character",
@@ -173,7 +179,7 @@ const phaseBQuestions: QuestionSchema[] = [
     level: "advanced",
     required: false,
     optionSetId: "image_character_interaction",
-    scopeToOption: PORTRAIT_SUBJECT_SCOPE
+    scopeToOption: INTERACTION_SUBJECT_SCOPE
   },
   {
     id: "pose",

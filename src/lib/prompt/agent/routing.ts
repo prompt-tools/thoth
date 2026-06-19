@@ -56,3 +56,14 @@ export function suggestedIdsFromDescription(description: string, type: string): 
   if (hasAny(lower, MAN_SIGNALS)) return new Set(["image_subject:handsome_man"]);
   return new Set();
 }
+
+/**
+ * Subject option ids for scope + render when the user skipped subject or only
+ * typed free text. Falls back to single_person for non-empty portrait seeds.
+ */
+export function inferSubjectOptionIds(description: string, type: string): string[] {
+  const fromDesc = suggestedIdsFromDescription(description, type);
+  if (fromDesc.size > 0) return [...fromDesc];
+  if (type === "人像" && description.trim()) return ["image_subject:single_person"];
+  return [];
+}

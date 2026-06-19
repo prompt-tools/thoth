@@ -10,6 +10,7 @@ import { logAgent } from "./debug-log";
 import { routePrimaryType } from "./routing";
 import { activeDimensions } from "./active-dimensions";
 import type { Precision } from "./gradient";
+import { GRADIENT } from "./gradient";
 import { conflictIdsFor, suggestedIdsFor } from "./audit-model";
 
 const ANTHROPIC_VERSION = "2023-06-01";
@@ -215,7 +216,7 @@ export function buildTurnRequest(
 
   // C-9b: use gradient routing + activeDimensions instead of OVERALL gate
   const type = routePrimaryType(userDescription ?? "");
-  const { ordered, done } = activeDimensions(type, precision, history);
+  const { ordered, done } = activeDimensions(type, precision, history, GRADIENT, userDescription);
 
   // Build pool from ordered dimension ids
   const pool = ordered

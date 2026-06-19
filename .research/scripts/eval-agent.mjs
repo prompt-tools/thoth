@@ -55,11 +55,11 @@ await loadTs("src/lib/prompt/init.ts");
 
 const { buildTurnRequest, parseTurnResponse, runAgentTurn, autoFillDimensions } = await loadTs("src/lib/prompt/agent/client.ts");
 const { resolveVisibleOptions } = await loadTs("src/lib/prompt/agent/options-resolver.ts");
-const { appendAnswer, buildRenderInputs } = await loadTs("src/lib/prompt/agent/history.ts");
+const { appendAnswer, buildRenderInputs, withInferredSubject } = await loadTs("src/lib/prompt/agent/history.ts");
 const { buildCatalogManifest } = await loadTs("src/lib/prompt/agent/catalog-manifest.ts");
 const { getProvider, PROVIDER_PRESETS } = await loadTs("src/lib/prompt/agent/providers.ts");
 const { renderPrompt } = await loadTs("src/lib/prompt/adapters.ts");
-const { routePrimaryType } = await loadTs("src/lib/prompt/agent/routing.ts");
+const { routePrimaryType, inferSubjectOptionIds } = await loadTs("src/lib/prompt/agent/routing.ts");
 const { imagePromptAgentWorkType } = await loadTs("src/lib/prompt/work-types/image-prompt-agent.worktype.ts");
 const { computeFillSet } = await loadTs("src/lib/prompt/agent/fill.ts");
 const { boostedQuestionIds } = await loadTs("src/lib/prompt/agent/fill-boost.ts");
@@ -344,7 +344,11 @@ async function runOne(runId, seedValue, description) {
     } else {
       ans = autoAnswer(dim, shown, rng);
     }
-    const nextHistory = appendAnswer(history, dim.questionId, ans.pickedIds, ans.freeText);
+    let pickedIds = ans.pickedIds;
+    if (decision.nextQuestionId === "subject" && pickedIds.length === 0) {
+      pickedIds = inferSubjectOptionIds(description, routePrimaryType(description));
+    }
+    const nextHistory = appendAnswer(history, dim.questionId, pickedIds, ans.freeText);
     history.length = 0;
     history.push(...nextHistory);
 
@@ -360,7 +364,7 @@ async function runOne(runId, seedValue, description) {
       outOfPool: diagnostics.outOfPool,
       repeatedDimension,
       conflictDropped: shown.conflictDropped,
-      answer: { kind: ans.kind, ids: ans.pickedIds, text: ans.freeText },
+      answer: { kind: ans.kind, ids: pickedIds, text: ans.freeText },
       latencyMs,
       diagnostics: { attempts: diagnostics.attempts, corrected: diagnostics.corrected, fallbackUsed: diagnostics.fallbackUsed, source: diagnostics.source, usage: diagnostics.usage },
     });
@@ -406,7 +410,10 @@ async function runOne(runId, seedValue, description) {
   }
 
   // final render
-  const { selections, freeTexts } = buildRenderInputs(history, manifest);
+  const { selections, freeTexts } = buildRenderInputs(
+    withInferredSubject(history, description, routePrimaryType(description)),
+    manifest,
+  );
   let finalPrompt = { zh: "", en: "", zhEmpty: true, enEmpty: true };
   try {
     const rendered = renderPrompt({

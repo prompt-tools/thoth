@@ -11,9 +11,9 @@ import { runAgentTurn, polishPrompt, autoFillDimensions } from "@/lib/prompt/age
 import { DEFAULT_PROVIDER_ID, getProvider } from "@/lib/prompt/agent/providers";
 import { suggestedIdsFor } from "@/lib/prompt/agent/audit-model";
 import { resolveVisibleOptions } from "@/lib/prompt/agent/options-resolver";
-import { appendAnswer, selectionValueFor, buildRenderInputs } from "@/lib/prompt/agent/history";
+import { appendAnswer, selectionValueFor, buildRenderInputs, withInferredSubject } from "@/lib/prompt/agent/history";
 import { logAgent, getAgentLog } from "@/lib/prompt/agent/debug-log";
-import { routePrimaryType, suggestedIdsFromDescription } from "@/lib/prompt/agent/routing";
+import { routePrimaryType, suggestedIdsFromDescription, inferSubjectOptionIds } from "@/lib/prompt/agent/routing";
 import type { Precision } from "@/lib/prompt/agent/gradient";
 import { computeFillSet } from "@/lib/prompt/agent/fill";
 import { boostedQuestionIds } from "@/lib/prompt/agent/fill-boost";
@@ -166,7 +166,10 @@ export function useAgentGuideController() {
   // conflict filtering + suggested badges but NOT used for final render.
   const rendered: RenderedPrompt | null = useMemo(() => {
     if (phase !== "done") return null;
-    const { selections: sel, freeTexts: ft } = buildRenderInputs(history, manifest);
+    const { selections: sel, freeTexts: ft } = buildRenderInputs(
+      withInferredSubject(history, description, primaryType),
+      manifest,
+    );
     return renderPrompt({
       workType: imagePromptAgentWorkType,
       // Seed-anchor: carry the user's original request so subject identity (occupation,
@@ -176,7 +179,7 @@ export function useAgentGuideController() {
       selections: sel,
       freeTexts: ft,
     });
-  }, [phase, history, manifest, description]);
+  }, [phase, history, manifest, description, primaryType]);
 
   // Telemetry: when a session completes, persist the full journey + the final prompt.
   useEffect(() => {
@@ -304,7 +307,10 @@ export function useAgentGuideController() {
           }
 
           // H2: empty prompt guard (now on filledHistory)
-          const { selections: sel, freeTexts: ft } = buildRenderInputs(filledHistory, manifest);
+          const { selections: sel, freeTexts: ft } = buildRenderInputs(
+            withInferredSubject(filledHistory, descriptionRef.current, primaryType),
+            manifest,
+          );
           if (Object.keys(sel).length === 0 && Object.keys(ft).length === 0) {
             setError("还没选任何内容，请至少选几项或换个描述");
             return;
@@ -335,7 +341,7 @@ export function useAgentGuideController() {
         if (sessionRef.current === mySession) setLoading(false);
       }
     },
-    [manifest]
+    [manifest, primaryType]
   );
 
   const saveKeyAndStart = useCallback(
@@ -461,12 +467,14 @@ export function useAgentGuideController() {
     const text = draftText.trim();
     if (draft.length === 0 && !text) return;
     const questionId = decision.nextQuestionId;
-    const nextHistory = appendAnswer(history, questionId, draft, text || undefined);
-    logAgent("submit", { questionId, selectedOptionIds: draft, freeText: text || undefined });
-    // Only write a selection value when options were picked — never `undefined`
-    // (would violate PromptSelections). Free-text-only goes through freeTexts.
-    if (draft.length > 0) {
-      const value = selectionValueFor(currentDimension.mode, draft);
+    let picked = draft;
+    if (questionId === "subject" && picked.length === 0) {
+      picked = inferSubjectOptionIds(descriptionRef.current, primaryType);
+    }
+    const nextHistory = appendAnswer(history, questionId, picked, text || undefined);
+    logAgent("submit", { questionId, selectedOptionIds: picked, freeText: text || undefined });
+    if (picked.length > 0) {
+      const value = selectionValueFor(currentDimension.mode, picked);
       if (value !== undefined) {
         setSelections((prev) => ({ ...prev, [questionId]: value }));
       }
@@ -480,19 +488,29 @@ export function useAgentGuideController() {
     setHistory(nextHistory);
     flushTelemetry("submit"); // checkpoint each answer (captures abandonment too)
     void fetchNext(nextHistory);
-  }, [decision, currentDimension, draft, draftText, history, fetchNext, flushTelemetry]);
+  }, [decision, currentDimension, draft, draftText, history, fetchNext, flushTelemetry, primaryType]);
 
   const skipStep = useCallback(() => {
     if (!decision || !currentDimension) return;
     const questionId = decision.nextQuestionId;
-    logAgent("submit", { questionId, skipped: true });
-    const nextHistory = appendAnswer(history, questionId, []);
+    const picked =
+      questionId === "subject"
+        ? inferSubjectOptionIds(descriptionRef.current, primaryType)
+        : [];
+    logAgent("submit", { questionId, skipped: true, inferredSubjectIds: picked.length ? picked : undefined });
+    const nextHistory = appendAnswer(history, questionId, picked);
+    if (picked.length > 0) {
+      const value = selectionValueFor(currentDimension.mode, picked);
+      if (value !== undefined) {
+        setSelections((prev) => ({ ...prev, [questionId]: value }));
+      }
+    }
     setHistory(nextHistory);
     setDraft([]);
     setDraftText("");
     flushTelemetry("skip");
     void fetchNext(nextHistory);
-  }, [decision, currentDimension, history, fetchNext, flushTelemetry]);
+  }, [decision, currentDimension, history, fetchNext, flushTelemetry, primaryType]);
 
   const finishNow = useCallback(async () => {
     // Nothing to stitch if the user hasn't answered anything yet.
@@ -524,11 +542,14 @@ export function useAgentGuideController() {
 
     setAutoFilledQuestionIds(filledIds);
     setHistory(filledHistory);
-    const { selections: sel, freeTexts: ft } = buildRenderInputs(filledHistory, manifest);
+    const { selections: sel, freeTexts: ft } = buildRenderInputs(
+      withInferredSubject(filledHistory, descriptionRef.current, primaryType),
+      manifest,
+    );
     setSelections(sel);
     setFreeTexts(ft);
     setPhase("done");
-  }, [history, manifest]);
+  }, [history, manifest, primaryType]);
 
   const polish = useCallback(async () => {
     if (!rendered) return;

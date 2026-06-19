@@ -1,6 +1,22 @@
 import type { PromptSelections, SelectionValue } from "../types";
 import type { AgentHistoryItem } from "./decision";
 import type { CatalogDimension, CatalogManifest } from "./catalog-manifest";
+import { inferSubjectOptionIds } from "./routing";
+
+/** When subject was skipped or free-text-only, attach inferred option ids for render. */
+export function withInferredSubject(
+  history: AgentHistoryItem[],
+  userDescription: string,
+  type = "人像",
+): AgentHistoryItem[] {
+  const entry = history.find((h) => h.questionId === "subject");
+  if (!entry || entry.selectedOptionIds.length > 0) return history;
+  const inferred = inferSubjectOptionIds(userDescription, type);
+  if (inferred.length === 0) return history;
+  return history.map((h) =>
+    h.questionId === "subject" ? { ...h, selectedOptionIds: inferred } : h,
+  );
+}
 
 /** Derive the PromptSelections-compatible value for a set of picked option ids.
  *  Returns undefined when no options are picked (e.g. skip or free-text-only). */

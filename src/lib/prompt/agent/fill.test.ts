@@ -100,10 +100,10 @@ describe("computeFillSet (A3)", () => {
       { questionId: "framing", selectedOptionIds: ["image_framing:medium_shot"] },
       { questionId: "portrait_expression", selectedOptionIds: ["image_portrait_expression:confident"] },
     ];
-    const plain = computeFillSet("人像", history, manifest, 4);
+    const plain = computeFillSet("人像", history, manifest, 4, undefined, "普通描述");
     const boosted = computeFillSet("人像", history, manifest, 4, undefined, "银发剑士游戏立绘");
-    expect(plain).not.toContain("hair");
-    expect(boosted).toContain("hair");
+    expect(plain).toContain("hair");
+    expect(boosted[0]).toBe("hair");
   });
 
   it("boosts render style when the seed mentions otome", () => {
@@ -130,6 +130,71 @@ describe("computeFillSet (A3)", () => {
     const boosted = computeFillSet("人像", history, manifest, 5, undefined, "银发剑士游戏立绘");
     expect(plain.length).toBeLessThanOrEqual(4);
     expect(boosted.length).toBe(5);
+  });
+
+  it("P0-1: default fill cap includes lighting, hair, and pose for portrait", () => {
+    const history: AgentHistoryItem[] = [
+      { questionId: "subject", selectedOptionIds: ["image_subject:beautiful_woman"] },
+      { questionId: "person_type", selectedOptionIds: ["image_person_type:realistic_portrait"] },
+      { questionId: "gender_presentation", selectedOptionIds: ["image_gender_presentation:feminine"] },
+      { questionId: "framing", selectedOptionIds: ["image_framing:medium_shot"] },
+      { questionId: "portrait_expression", selectedOptionIds: ["image_portrait_expression:gentle"] },
+    ];
+    const fill = computeFillSet("人像", history, manifest, 4, undefined, "普通女生写真");
+    expect(fill).toContain("lighting");
+    expect(fill).toContain("hair");
+    expect(fill).toContain("pose");
+  });
+
+  it("P0-5: omits age_band from cap when seed has no age cue", () => {
+    const history: AgentHistoryItem[] = [
+      { questionId: "subject", selectedOptionIds: ["image_subject:beautiful_woman"] },
+      { questionId: "person_type", selectedOptionIds: ["image_person_type:realistic_portrait"] },
+      { questionId: "gender_presentation", selectedOptionIds: ["image_gender_presentation:feminine"] },
+      { questionId: "framing", selectedOptionIds: ["image_framing:medium_shot"] },
+      { questionId: "portrait_expression", selectedOptionIds: ["image_portrait_expression:gentle"] },
+    ];
+    const fill = computeFillSet("人像", history, manifest, 4, undefined, "普通女生写真");
+    expect(fill).not.toContain("age_band");
+  });
+
+  it("P0-4: default fill prefers pose over outfit in cap", () => {
+    const history: AgentHistoryItem[] = [
+      { questionId: "subject", selectedOptionIds: ["image_subject:beautiful_woman"] },
+      { questionId: "person_type", selectedOptionIds: ["image_person_type:realistic_portrait"] },
+      { questionId: "gender_presentation", selectedOptionIds: ["image_gender_presentation:feminine"] },
+      { questionId: "framing", selectedOptionIds: ["image_framing:medium_shot"] },
+      { questionId: "portrait_expression", selectedOptionIds: ["image_portrait_expression:gentle"] },
+    ];
+    const fill = computeFillSet("人像", history, manifest, 5, undefined, "普通女生写真");
+    expect(fill).toContain("pose");
+    expect(fill).not.toContain("outfit");
+  });
+
+  it("P0-4: outfit seed keeps outfit and drops pose from fill cap", () => {
+    const history: AgentHistoryItem[] = [
+      { questionId: "subject", selectedOptionIds: ["image_subject:beautiful_woman"] },
+      { questionId: "person_type", selectedOptionIds: ["image_person_type:realistic_portrait"] },
+      { questionId: "gender_presentation", selectedOptionIds: ["image_gender_presentation:feminine"] },
+      { questionId: "framing", selectedOptionIds: ["image_framing:medium_shot"] },
+      { questionId: "portrait_expression", selectedOptionIds: ["image_portrait_expression:gentle"] },
+    ];
+    const fill = computeFillSet("人像", history, manifest, 5, undefined, "穿婚纱的新娘");
+    expect(fill).toContain("outfit");
+    expect(fill).not.toContain("pose");
+  });
+
+  it("P1-8 fill path: drops aspect_ratio after framing without camera seed", () => {
+    const history: AgentHistoryItem[] = [
+      { questionId: "subject", selectedOptionIds: ["image_subject:beautiful_woman"] },
+      { questionId: "person_type", selectedOptionIds: ["image_person_type:realistic_portrait"] },
+      { questionId: "gender_presentation", selectedOptionIds: ["image_gender_presentation:feminine"] },
+      { questionId: "framing", selectedOptionIds: ["image_framing:medium_shot"] },
+      { questionId: "portrait_expression", selectedOptionIds: ["image_portrait_expression:gentle"] },
+    ];
+    const fill = computeFillSet("人像", history, manifest, 10, undefined, "普通女生写真");
+    expect(fill).not.toContain("aspect_ratio");
+    expect(fill).not.toContain("camera_angle");
   });
 
   it("returns empty for types with no secondary remaining", () => {

@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import "../init";
 import { activeDimensions } from "./active-dimensions";
+import { GRADIENT } from "./gradient";
 import { buildCatalogManifest } from "./catalog-manifest";
 import type { AgentHistoryItem } from "./decision";
 
@@ -87,6 +88,17 @@ describe("activeDimensions portrait-only flow", () => {
     ]);
   });
 
+  it("empty subject pick infers scope from description so essentials are not dropped", () => {
+    const history: AgentHistoryItem[] = [{ questionId: "subject", selectedOptionIds: [] }];
+    const { ordered } = activeDimensions("人像", "simple", history, GRADIENT, "游戏角色立绘，银发剑士");
+    expect(ordered).toEqual([
+      "person_type",
+      "gender_presentation",
+      "framing",
+      "portrait_expression",
+    ]);
+  });
+
   it("aspect_ratio and scene enter at standard precision", () => {
     const simple = activeDimensions("人像", "simple", []).ordered;
     expect(simple).not.toContain("aspect_ratio");
@@ -160,6 +172,54 @@ describe("activeDimensions portrait-only flow", () => {
     const { ordered } = activeDimensions("人像", "detailed", history);
     expect(ordered).toContain("character_archetype");
     expect(ordered).toContain("character_props");
+    expect(ordered).not.toContain("character_interaction");
+  });
+
+  it("P1-6: character_interaction only for otome, couple, and group subjects", () => {
+    const otome = activeDimensions("人像", "detailed", [
+      { questionId: "subject", selectedOptionIds: ["image_subject:otome_character"] },
+    ]).ordered;
+    expect(otome).toContain("character_interaction");
+
+    const couple = activeDimensions("人像", "detailed", [
+      { questionId: "subject", selectedOptionIds: ["image_subject:couple_portrait"] },
+    ]).ordered;
+    expect(couple).toContain("character_interaction");
+
+    const group = activeDimensions("人像", "detailed", [
+      { questionId: "subject", selectedOptionIds: ["image_subject:group_portrait"] },
+    ]).ordered;
+    expect(group).toContain("character_interaction");
+
+    const woman = activeDimensions("人像", "detailed", [
+      { questionId: "subject", selectedOptionIds: ["image_subject:beautiful_woman"] },
+    ]).ordered;
+    expect(woman).not.toContain("character_interaction");
+  });
+
+  it("P1-7: detailed flow omits use_case and post_processing", () => {
+    const { ordered } = activeDimensions("人像", "detailed", [
+      { questionId: "subject", selectedOptionIds: ["image_subject:beautiful_woman"] },
+    ]);
+    expect(ordered).not.toContain("use_case");
+    expect(ordered).not.toContain("post_processing");
+    expect(ordered).toContain("detail_level");
+    expect(ordered).toContain("composition");
+  });
+
+  it("P1-8: suppresses aspect_ratio and camera_angle after framing without camera seed", () => {
+    const history: AgentHistoryItem[] = [
+      { questionId: "subject", selectedOptionIds: ["image_subject:beautiful_woman"] },
+      { questionId: "framing", selectedOptionIds: ["image_framing:medium_shot"] },
+    ];
+    const withoutSeed = activeDimensions("人像", "standard", history, GRADIENT, "普通女生写真").ordered;
+    expect(withoutSeed).not.toContain("aspect_ratio");
+    expect(withoutSeed).not.toContain("camera_angle");
+    expect(withoutSeed).toContain("camera");
+
+    const withSeed = activeDimensions("人像", "standard", history, GRADIENT, "85mm 虚化人像").ordered;
+    expect(withSeed).toContain("aspect_ratio");
+    expect(withSeed).toContain("camera_angle");
   });
 
   it("generic fallback mirrors portrait detailed dimensions", () => {

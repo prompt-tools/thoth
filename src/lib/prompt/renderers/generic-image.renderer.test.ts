@@ -87,6 +87,16 @@ describe("P6 portrait renderer coupling: pose/outfit/hair fold into subject phra
     }
   });
 
+  it("P2-10: scoped dims follow hair before outfit before pose in subject phrase", () => {
+    const brief = makeBrief([personSubjectItem, poseItem, outfitItem, hairItem]);
+    const rendered = renderGenericImage(brief);
+    const hairIdx = rendered.zhPrompt.indexOf("整洁短发");
+    const outfitIdx = rendered.zhPrompt.indexOf("休闲轻便服装");
+    const poseIdx = rendered.zhPrompt.indexOf("站立全身姿势");
+    expect(hairIdx).toBeLessThan(outfitIdx);
+    expect(outfitIdx).toBeLessThan(poseIdx);
+  });
+
   it("portrait dims do NOT appear for a subject id outside portrait scope", () => {
     const outsideScopeSubjectItem = {
       questionId: "subject",
@@ -200,7 +210,8 @@ describe("portrait E2E renderer samples", () => {
         person_type: ["image_person_type:game_character"],
         character_render_style: ["image_character_render_style:gacha_splash_art"],
         character_archetype: ["image_character_archetype:warrior_guardian"],
-        character_interaction: ["image_character_interaction:battle_ready"],
+        character_props: ["image_character_props:sword"],
+        pose: ["image_pose:standing"],
         framing: ["image_framing:wide_shot"],
       },
     });
@@ -208,6 +219,6 @@ describe("portrait E2E renderer samples", () => {
     expect(rendered.zhPrompt).toContain("游戏角色");
     expect(rendered.zhPrompt).toContain("卡面");
     expect(rendered.zhPrompt).toContain("战士");
-    expect(rendered.zhPrompt).toContain("战斗准备");
+    expect(rendered.zhPrompt).toMatch(/剑|姿态|stance/i);
   });
 });

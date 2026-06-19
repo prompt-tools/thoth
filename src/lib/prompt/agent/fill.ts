@@ -7,10 +7,10 @@
 import {
   GRADIENT,
 } from "./gradient";
-import { resolveActiveSet } from "./active-dimensions";
+import { resolveActiveSet, applyCameraQuestionDemotion } from "./active-dimensions";
 import type { AgentHistoryItem } from "./decision";
 import type { CatalogManifest } from "./catalog-manifest";
-import { boostFillCandidates } from "./fill-boost";
+import { applyPortraitFillPolicy, boostFillCandidates } from "./fill-boost";
 
 /**
  * Compute which secondary dimensions to auto-fill.
@@ -34,7 +34,8 @@ export function computeFillSet(
     gradient.primaryTypes.find((p) => p.type === "通用")!;
 
   // Active set at "standard" precision — includes essentials + secondary
-  const active = resolveActiveSet(type, "standard", history, gradient);
+  const active = resolveActiveSet(type, "standard", history, gradient, userDescription);
+  applyCameraQuestionDemotion(active, history, userDescription);
 
   // Identify which dims are essential vs secondary at this type
   const essentialIds = new Set([
@@ -74,6 +75,9 @@ export function computeFillSet(
     return ia - ib;
   });
 
-  const boosted = boostFillCandidates(fillCandidates, userDescription);
-  return boosted.slice(0, cap);
+  const ordered =
+    type === "人像"
+      ? applyPortraitFillPolicy(fillCandidates, userDescription)
+      : boostFillCandidates(fillCandidates, userDescription);
+  return ordered.slice(0, cap);
 }

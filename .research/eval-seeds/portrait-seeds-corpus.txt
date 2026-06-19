@@ -1,0 +1,8 @@
+# Corpus-stratified portrait seeds (5) — 2026-06-19
+# Source: .research/out/portrait-prompts-20260619.jsonl
+# Buckets: photo-realistic, business, otome-pov, game-char, anime, cyberpunk, historical, idol-vtuber, cosplay, couple, webtoon, fashion, oc-fantasy
+黑白人像摄影风格，使用上传人物的特写，呈现半侧脸姿态，发丝带有自然凌乱的细节；采用明暗对比强烈的布…
+图中角色的服饰动作表情环境都更加美丽吸引人，做到你能做到的极限
+Focus on man's face, blur his hand
+シネマティックな照明とソフトフォーカスの中、優しく微笑む人物が飛び込んでくるトイプードルを抱きしめ…
+hot white girl in prom dress

@@ -5,6 +5,10 @@ const FILL_BOOST_RULES: { questionId: string; signals: string[] }[] = [
     signals: ["银发", "黑发", "金发", "白发", "发型", "马尾", "刘海", "辫", "hair", "ponytail", "bangs", "braid"],
   },
   {
+    questionId: "pose",
+    signals: ["站", "坐", "走", "蹲", "回眸", "姿态", "pose", "standing", "sitting", "walking", "looking back"],
+  },
+  {
     questionId: "character_render_style",
     signals: ["立绘", "乙游", "卡面", "gacha", "splash", "live2d", "vtuber", "手游", "视觉小说"],
   },
@@ -18,7 +22,7 @@ const FILL_BOOST_RULES: { questionId: string; signals: string[] }[] = [
   },
   {
     questionId: "outfit",
-    signals: ["婚纱", "制服", "盔甲", "cosplay", "西装", "汉服", "和服", "机甲", "armor", "uniform"],
+    signals: ["婚纱", "制服", "盔甲", "cosplay", "西装", "汉服", "和服", "机甲", "armor", "uniform", "dress"],
   },
   {
     questionId: "character_interaction",
@@ -30,9 +34,32 @@ const FILL_BOOST_RULES: { questionId: string; signals: string[] }[] = [
   },
 ];
 
+const PORTRAIT_CORE_FILL = ["lighting", "hair", "pose"] as const;
+
+const AGE_BAND_SIGNALS = [
+  "青年", "少年", "成熟", "老年", "儿童", "teen", "adult", "mature", "elderly", "young", "middle-aged",
+];
+
+export const CAMERA_SEED_SIGNALS = [
+  "85mm", "35mm", "50mm", "24mm", "bokeh", "镜头", "虚化", "lens", "f/1", "f/2", "景深", "焦外", "mm lens",
+];
+
 function hasSignal(text: string, signals: string[]): boolean {
   const lower = text.toLowerCase();
   return signals.some((s) => lower.includes(s.toLowerCase()));
+}
+
+function outfitSignals(): string[] {
+  return FILL_BOOST_RULES.find((r) => r.questionId === "outfit")!.signals;
+}
+
+function poseSignals(): string[] {
+  return FILL_BOOST_RULES.find((r) => r.questionId === "pose")!.signals;
+}
+
+export function hasCameraSeed(description: string | undefined): boolean {
+  if (!description?.trim()) return false;
+  return hasSignal(description, CAMERA_SEED_SIGNALS);
 }
 
 export function boostedQuestionIds(description: string | undefined): Set<string> {
@@ -55,4 +82,35 @@ export function boostFillCandidates(candidates: string[], description: string | 
     else rest.push(qid);
   }
   return [...front, ...rest];
+}
+
+/**
+ * Portrait-only autofill ordering: seed boost → corpus B-tier core → outfit/pose XOR → age_band demotion.
+ */
+export function applyPortraitFillPolicy(
+  candidates: string[],
+  description: string | undefined,
+): string[] {
+  if (candidates.length === 0) return candidates;
+
+  const core = PORTRAIT_CORE_FILL.filter((id) => candidates.includes(id));
+  const rest = candidates.filter((id) => !(PORTRAIT_CORE_FILL as readonly string[]).includes(id));
+  let list = [...core, ...rest];
+
+  list = boostFillCandidates(list, description);
+
+  const desc = description ?? "";
+  if (list.includes("outfit") && list.includes("pose")) {
+    const outfitHit = hasSignal(desc, outfitSignals());
+    const poseHit = hasSignal(desc, poseSignals());
+    if (outfitHit && !poseHit) list = list.filter((q) => q !== "pose");
+    else if (poseHit && !outfitHit) list = list.filter((q) => q !== "outfit");
+    else list = list.filter((q) => q !== "outfit");
+  }
+
+  if (list.includes("age_band") && !hasSignal(desc, AGE_BAND_SIGNALS)) {
+    list = [...list.filter((q) => q !== "age_band"), "age_band"];
+  }
+
+  return list;
 }

@@ -1,0 +1,22 @@
+# Combined portrait eval seeds (20) — 2026-06-19
+# Manual: portrait-seeds.txt + corpus: .research/out/portrait-prompts-20260619.jsonl
+黑白人像摄影风格，使用上传人物的特写，呈现半侧脸姿态，发丝带有自然凌乱的细节；采用明暗对比强烈的布…
+图中角色的服饰动作表情环境都更加美丽吸引人，做到你能做到的极限
+Focus on man's face, blur his hand
+シネマティックな照明とソフトフォーカスの中、優しく微笑む人物が飛び込んでくるトイプードルを抱きしめ…
+hot white girl in prom dress
+海边回眸的漂亮女生，胶片感
+帅气男生职场商务肖像，自然光
+乙游男主 POV 心动对视
+游戏角色立绘，银发剑士
+日系二次元少女，校园风
+赛博朋克女黑客半身像
+古风小说女主，红衣侠女
+虚拟偶像 Live2D 风格头像
+cosplay 动漫角色，漫展场照
+情侣婚纱照，暖色调
+韩漫风格男生，柔光特写
+视觉小说 Bad End 场景女主
+3D 写实游戏角色，机甲少女
+黑白时尚杂志封面男模
+OC 原创奇幻精灵角色

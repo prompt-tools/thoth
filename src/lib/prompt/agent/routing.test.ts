@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { routePrimaryType, suggestedIdsFromDescription } from "./routing";
+import { routePrimaryType, suggestedIdsFromDescription, inferSubjectOptionIds } from "./routing";
 
 describe("routePrimaryType portrait-only routing", () => {
   it("routes portrait signals to 人像", () => {
@@ -51,5 +51,17 @@ describe("suggestedIdsFromDescription", () => {
   it("does not suggest non-portrait subjects", () => {
     expect(suggestedIdsFromDescription("一只橘猫", "人像")).toEqual(new Set());
     expect(suggestedIdsFromDescription("白底耳机产品图", "人像")).toEqual(new Set());
+  });
+});
+
+describe("inferSubjectOptionIds", () => {
+  it("uses description signals then single_person fallback", () => {
+    expect(inferSubjectOptionIds("游戏角色立绘，银发剑士", "人像")).toEqual([
+      "image_subject:game_character",
+    ]);
+    expect(inferSubjectOptionIds("xyz no signals", "人像")).toEqual([
+      "image_subject:single_person",
+    ]);
+    expect(inferSubjectOptionIds("", "人像")).toEqual([]);
   });
 });

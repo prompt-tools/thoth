@@ -1,22 +1,29 @@
 #!/usr/bin/env tsx
 /**
- * Compare eval dimension coverage vs the 13k portrait corpus.
+ * Compare eval dimension coverage vs portrait corpus (three-column metrics).
  *
  * Usage:
- *   npm run compare-corpus -- .research/out/eval/<stamp> [/path/to/prompts.jsonl]
+ *   npm run compare-corpus -- .research/out/eval/<stamp> [/path/to/corpus.csv|jsonl]
  */
 import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { loadCorpusTexts } from "./corpus-load.mjs";
+import {
+  SECTIONS,
+  DIM_TO_SECTION,
+  pct,
+  aggregateEvalSectionMetrics,
+} from "./eval-section-metrics.mjs";
 
 const root = path.resolve(import.meta.dirname, "../..");
 const evalDir = process.argv[2];
 const corpusPath =
   process.argv[3] ??
-  "/Users/klaus/Projects/controllable-image-prompt-guide/.research/out/nano-banana-pro-prompts-20260526/prompts.jsonl";
+  "/Users/klaus/Downloads/nano-banana-pro-prompts-20260619.csv";
 
 if (!evalDir || !fs.existsSync(path.join(evalDir, "runs.jsonl"))) {
-  console.error("Usage: npm run compare-corpus -- <eval-output-dir> [corpus.jsonl]");
+  console.error("Usage: npm run compare-corpus -- <eval-output-dir> [corpus.csv|jsonl]");
   process.exit(1);
 }
 if (!fs.existsSync(corpusPath)) {
@@ -29,61 +36,8 @@ async function loadTs(rel) {
 }
 
 const { analyzePortraitPrompts, detectPortraitSections, isPortraitPrompt } = await loadTs(
-  "src/lib/prompt/agent/portrait-prompt-analysis.ts"
+  "src/lib/prompt/agent/portrait-prompt-analysis.ts",
 );
-
-const SECTIONS = [
-  "subject",
-  "identity",
-  "face",
-  "hair",
-  "outfit",
-  "pose",
-  "interaction",
-  "scene",
-  "camera",
-  "lighting",
-  "style",
-  "quality",
-  "negative",
-];
-
-const DIM_TO_SECTION = {
-  subject: "subject",
-  person_type: "subject",
-  gender_presentation: "identity",
-  age_band: "identity",
-  skin_tone: "identity",
-  body_type: "pose",
-  face_features: "face",
-  hair: "hair",
-  makeup: "hair",
-  outfit: "outfit",
-  pose: "pose",
-  character_interaction: "interaction",
-  character_props: "interaction",
-  scene: "scene",
-  framing: "camera",
-  camera: "camera",
-  camera_angle: "camera",
-  aspect_ratio: "camera",
-  composition: "quality",
-  lighting: "lighting",
-  art_style: "style",
-  color_palette: "style",
-  mood: "style",
-  character_render_style: "style",
-  character_archetype: "style",
-  detail_level: "quality",
-  post_processing: "quality",
-  use_case: "quality",
-  constraints: "negative",
-  portrait_expression: "face",
-};
-
-function pct(n, d) {
-  return d ? Math.round((n / d) * 1000) / 10 : 0;
-}
 
 function sectionRatesFromTexts(texts) {
   const counts = Object.fromEntries(SECTIONS.map((s) => [s, 0]));
@@ -94,87 +48,39 @@ function sectionRatesFromTexts(texts) {
     n += 1;
     for (const s of sections) counts[s] += 1;
   }
-  const rates = Object.fromEntries(SECTIONS.map((s) => [s, pct(counts[s], n)]));
-  return { n, counts, rates };
+  return { n, counts, rates: Object.fromEntries(SECTIONS.map((s) => [s, pct(counts[s], n)])) };
 }
 
-// ── corpus ───────────────────────────────────────────────────────────────
-const corpusLines = fs.readFileSync(corpusPath, "utf8").split("\n").filter(Boolean);
-const corpusTexts = [];
-for (const line of corpusLines) {
-  try {
-    const row = JSON.parse(line);
-    const text = String(row.content ?? row.raw ?? row.prompt ?? "").trim();
-    if (text) corpusTexts.push(text);
-  } catch {
-    /* skip */
-  }
-}
-
+const corpusTexts = loadCorpusTexts(corpusPath);
 const corpusPortraitTexts = corpusTexts.filter((t) => isPortraitPrompt(t));
-const corpusAll = analyzePortraitPrompts(corpusTexts, 30);
 const corpusPortrait = analyzePortraitPrompts(corpusPortraitTexts, 30);
 const corpusPortraitSections = sectionRatesFromTexts(corpusPortraitTexts);
 
-// ── eval ─────────────────────────────────────────────────────────────────
 const runs = fs
   .readFileSync(path.join(evalDir, "runs.jsonl"), "utf8")
   .split("\n")
   .filter(Boolean)
   .map(JSON.parse);
 
-const dimTouchCounts = {};
-const sectionRunCounts = Object.fromEntries(SECTIONS.map((s) => [s, 0]));
-const sectionPromptCounts = Object.fromEntries(SECTIONS.map((s) => [s, 0]));
-let evalRunsWithPrompt = 0;
+const metrics = aggregateEvalSectionMetrics(runs, detectPortraitSections);
 
-for (const run of runs) {
-  if (run.terminationReason === "error") continue;
-  const dims = new Set([
-    ...(run.askedDimensions ?? []),
-    ...(run.autoFilledDimensions ?? []).map((x) => x.questionId),
-  ]);
-  const sectionsHit = new Set();
-  for (const d of dims) {
-    dimTouchCounts[d] = (dimTouchCounts[d] || 0) + 1;
-    const sec = DIM_TO_SECTION[d];
-    if (sec) sectionsHit.add(sec);
-  }
-  for (const s of sectionsHit) sectionRunCounts[s] += 1;
+const deviations = (evalRates, label) =>
+  SECTIONS.map((s) => ({
+    section: s,
+    corpusRate: corpusPortraitSections.rates[s],
+    evalRate: evalRates[s],
+    delta: Math.round((evalRates[s] - corpusPortraitSections.rates[s]) * 10) / 10,
+    metric: label,
+  })).sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
 
-  const prompt = run.finalPrompt?.zh ?? run.finalPrompt?.en ?? "";
-  if (prompt) {
-    evalRunsWithPrompt += 1;
-    for (const s of detectPortraitSections(prompt)) {
-      sectionPromptCounts[s] += 1;
-    }
-  }
-}
-
-const evalN = runs.filter((r) => r.terminationReason !== "error").length;
-const evalSectionRates = Object.fromEntries(
-  SECTIONS.map((s) => [s, pct(sectionRunCounts[s], evalN)])
-);
-const evalPromptSectionRates = Object.fromEntries(
-  SECTIONS.map((s) => [s, pct(sectionPromptCounts[s], evalRunsWithPrompt)])
-);
-
-// ── deviation ────────────────────────────────────────────────────────────
-const deviations = SECTIONS.map((s) => {
-  const corpusRate = corpusPortraitSections.rates[s];
-  const evalRate = evalSectionRates[s];
-  const delta = Math.round((evalRate - corpusRate) * 10) / 10;
-  return { section: s, corpusRate, evalRate, delta };
-}).sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
-
-const topCorpusTokens = corpusPortrait.topTokens.slice(0, 15).map((t) => t.token);
-const dimRanking = Object.entries(dimTouchCounts)
-  .sort((a, b) => b[1] - a[1])
-  .map(([dim, count]) => ({ dim, count, rate: pct(count, evalN), section: DIM_TO_SECTION[dim] ?? "?" }));
+const devQuestionnaire = deviations(metrics.sectionRatesQuestionnaire, "questionnaire");
+const devAutofill = deviations(metrics.sectionRatesAutofill, "autofill");
+const devPath = deviations(metrics.sectionRatesPath, "path");
 
 const report = {
   evalDir,
   corpusPath,
+  metricsVersion: 2,
   corpus: {
     totalRows: corpusTexts.length,
     portraitRows: corpusPortraitTexts.length,
@@ -184,60 +90,59 @@ const report = {
   },
   eval: {
     totalRuns: runs.length,
-    successfulRuns: evalN,
+    successfulRuns: metrics.evalN,
+    runsWithFinalPrompt: metrics.promptN,
+    earlyStopCount: metrics.earlyStopCount,
     precision: runs[0]?.precision ?? null,
     avgFinalDimCount:
-      Math.round((runs.reduce((a, r) => a + (r.finalDimCount ?? 0), 0) / Math.max(1, evalN)) * 10) / 10,
-    dimensionTouchRates: dimRanking,
-    sectionRatesFromDims: evalSectionRates,
-    sectionRatesFromFinalPrompt: evalPromptSectionRates,
+      Math.round((runs.reduce((a, r) => a + (r.finalDimCount ?? 0), 0) / Math.max(1, metrics.evalN)) * 10) / 10,
+    sectionRatesQuestionnaire: metrics.sectionRatesQuestionnaire,
+    sectionRatesAutofill: metrics.sectionRatesAutofill,
+    sectionRatesPath: metrics.sectionRatesPath,
+    sectionRatesFinalPrompt: metrics.sectionRatesFinalPrompt,
+    dimQuestionnaireRates: metrics.dimQuestionnaireRates,
+    dimAutofillRates: metrics.dimAutofillRates,
+    /** @deprecated use sectionRatesPath */
+    sectionRatesFromDims: metrics.sectionRatesPath,
+    sectionRatesFromFinalPrompt: metrics.sectionRatesFinalPrompt,
   },
-  deviation: deviations,
-  interpretation: {
-    overWeighted: deviations.filter((d) => d.delta > 15).map((d) => d.section),
-    underWeighted: deviations.filter((d) => d.delta < -15).map((d) => d.section),
-    corpusTokensWeUnderuse: topCorpusTokens.filter((tok) => {
-      const lowStyle = ["lighting", "camera", "style", "scene"].some((s) =>
-        corpusPortraitSections.rates[s] > 40 && (evalSectionRates[s] ?? 0) < corpusPortraitSections.rates[s] - 20
-      );
-      void lowStyle;
-      return false;
-    }),
+  deviation: {
+    questionnaire: devQuestionnaire,
+    autofill: devAutofill,
+    path: devPath,
   },
 };
 
-// Heuristic notes
 const notes = [];
-if (evalSectionRates.identity > corpusPortraitSections.rates.identity + 10) {
-  notes.push("向导比语料更强调 identity（性别/年龄/肤色），简单模式 autofilled age_band 拉高。");
+const q = metrics.sectionRatesQuestionnaire;
+const a = metrics.sectionRatesAutofill;
+const corpus = corpusPortraitSections.rates;
+if (corpus.hair > a.hair + 20 && q.hair < 10) {
+  notes.push("hair：语料高、问卷低；优先调 autofill order/cap（P0-1）。");
 }
-if (evalSectionRates.face > corpusPortraitSections.rates.face + 10) {
-  notes.push("向导比语料更强调 face（表情/五官），portrait_expression + face_features autofilled。");
+if (corpus.pose > a.pose + 20 && q.pose < 5) {
+  notes.push("pose：autofill 0%；order 中 pose 靠后 + cap 挤掉（P0-1/4）。");
 }
-if (corpusPortraitSections.rates.lighting > evalSectionRates.lighting + 15) {
-  notes.push("语料 lighting 覆盖远高于当前简单模式 eval（光线多在 secondary/autofill）。");
+if (corpus.lighting > a.lighting + 20 && q.lighting < 10) {
+  notes.push("lighting：主要靠 autofill，问卷未覆盖（P0-1）。");
 }
-if (corpusPortraitSections.rates.style > evalSectionRates.style + 15) {
-  notes.push("语料 style/画风词频高，但简单模式几乎不问 art_style/character_render_style。");
+if (metrics.sectionRatesPath.interaction > corpus.interaction + 30) {
+  notes.push("interaction 路径覆盖远高于语料；收窄 scope（P1-6）。");
 }
-if (corpusPortraitSections.rates.outfit > evalSectionRates.outfit + 15) {
-  notes.push("语料 outfit 常见，简单模式跳过服饰维度，专业模式才覆盖。");
-}
-if (corpusPortraitSections.rates.hair > evalSectionRates.hair + 10) {
-  notes.push("语料 hair 标签不少，但简单模式不主动问 hair（靠 seed 文本或专业模式）。");
-}
-report.interpretation.notes = notes;
+report.interpretation = { notes };
 
 const outPath = path.join(evalDir, "corpus-compare.json");
 fs.writeFileSync(outPath, JSON.stringify(report, null, 2), "utf8");
 
 console.log(`Wrote ${outPath}\n`);
 console.log(`Corpus: ${corpusPortraitTexts.length}/${corpusTexts.length} portrait (${report.corpus.portraitRate}%)`);
-console.log(`Eval: ${evalN} runs, avg ${report.eval.avgFinalDimCount} dims in final brief\n`);
-console.log("Section rate comparison (corpus portrait % vs eval dim-touch %):");
-for (const d of deviations) {
-  const flag = Math.abs(d.delta) >= 15 ? " ⚠" : "";
-  console.log(`  ${d.section.padEnd(12)} corpus ${String(d.corpusRate).padStart(5)}%  eval ${String(d.evalRate).padStart(5)}%  Δ${d.delta >= 0 ? "+" : ""}${d.delta}%${flag}`);
+console.log(`Eval: ${metrics.evalN} runs, earlyStop=${metrics.earlyStopCount}, avg ${report.eval.avgFinalDimCount} dims\n`);
+console.log("Section rates (corpus % | questionnaire % | autofill % | finalPrompt %):");
+for (const s of SECTIONS) {
+  const fp = metrics.sectionRatesFinalPrompt[s];
+  console.log(
+    `  ${s.padEnd(12)} corpus ${String(corpus[s]).padStart(5)}%  Q ${String(q[s]).padStart(5)}%  A ${String(a[s]).padStart(5)}%  FP ${String(fp).padStart(5)}%`,
+  );
 }
 if (notes.length) {
   console.log("\nNotes:");

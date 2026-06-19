@@ -5,6 +5,8 @@ import {
 } from "./gradient";
 import type { AgentHistoryItem } from "./decision";
 import { buildSubjectScopedIndex } from "../renderers/generic-image.renderer";
+import { hasCameraSeed } from "./fill-boost";
+import { inferSubjectOptionIds } from "./routing";
 
 export const PRECISION_ORDER: Record<Precision, number> = {
   simple: 0,
@@ -14,9 +16,19 @@ export const PRECISION_ORDER: Record<Precision, number> = {
 
 const SUBJECT_SCOPED_INDEX = buildSubjectScopedIndex(GRADIENT);
 
-function selectedSubjectIds(history: AgentHistoryItem[]): Set<string> {
+/** In catalog/manifest but never asked interactively (P1-7). */
+const WIZARD_OMIT_QUESTION_IDS = new Set(["use_case", "post_processing"]);
+
+export function effectiveSubjectIds(
+  history: AgentHistoryItem[],
+  userDescription?: string,
+  type = "人像",
+): Set<string> {
   const entry = history.find((h) => h.questionId === "subject");
-  return entry ? new Set(entry.selectedOptionIds) : new Set();
+  if (!entry) return new Set();
+  if (entry.selectedOptionIds.length > 0) return new Set(entry.selectedOptionIds);
+  if (!userDescription?.trim()) return new Set();
+  return new Set(inferSubjectOptionIds(userDescription, type));
 }
 
 /** Remove dimensions whose scopeToOption does not match the selected subject. */
@@ -24,8 +36,10 @@ export function applySubjectScopeFilter(
   active: Set<string>,
   history: AgentHistoryItem[],
   scopedIndex = SUBJECT_SCOPED_INDEX,
+  userDescription?: string,
+  type = "人像",
 ): void {
-  const subjectIds = selectedSubjectIds(history);
+  const subjectIds = effectiveSubjectIds(history, userDescription, type);
   for (const qid of [...active]) {
     const activators = scopedIndex.get(qid);
     if (!activators) continue;
@@ -57,6 +71,7 @@ export function resolveActiveSet(
   precision: Precision,
   history: AgentHistoryItem[],
   gradient = GRADIENT,
+  userDescription?: string,
 ): Set<string> {
   const t =
     gradient.primaryTypes.find((p) => p.type === type) ??
@@ -88,9 +103,23 @@ export function resolveActiveSet(
     }
   }
 
-  applySubjectScopeFilter(active, history);
+  applySubjectScopeFilter(active, history, SUBJECT_SCOPED_INDEX, userDescription, type);
+
+  for (const qid of WIZARD_OMIT_QUESTION_IDS) active.delete(qid);
 
   return active;
+}
+
+/** After framing is chosen, drop redundant camera dims unless the seed mentions lens/bokeh cues. */
+export function applyCameraQuestionDemotion(
+  active: Set<string>,
+  history: AgentHistoryItem[],
+  userDescription?: string,
+): void {
+  const framingAsked = history.some((h) => h.questionId === "framing");
+  if (!framingAsked || hasCameraSeed(userDescription)) return;
+  active.delete("aspect_ratio");
+  active.delete("camera_angle");
 }
 
 /**
@@ -111,8 +140,10 @@ export function activeDimensions(
   precision: Precision,
   history: AgentHistoryItem[],
   gradient = GRADIENT,
+  userDescription?: string,
 ): { ordered: string[]; done: boolean } {
-  const active = resolveActiveSet(type, precision, history, gradient);
+  const active = resolveActiveSet(type, precision, history, gradient, userDescription);
+  applyCameraQuestionDemotion(active, history, userDescription);
 
   // Remove already-asked
   const asked = new Set(history.map((h) => h.questionId));
