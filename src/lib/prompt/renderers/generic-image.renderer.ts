@@ -27,6 +27,45 @@ export function buildSubjectScopedIndex(gradient: GradientData): Map<string, Set
 
 const DEFAULT_SCOPED_INDEX = buildSubjectScopedIndex(GRADIENT);
 
+/** Corpus-aligned order for scoped dims folded into the subject phrase (P2-10). */
+const SCOPED_DIM_ORDER = [
+  "person_type",
+  "gender_presentation",
+  "age_band",
+  "skin_tone",
+  "portrait_expression",
+  "face_features",
+  "makeup",
+  "hair",
+  "outfit",
+  "pose",
+  "body_type",
+  "character_render_style",
+  "character_archetype",
+  "character_interaction",
+  "character_props",
+] as const;
+
+/** templateMap keys after subject assembly — scene/lighting before style/camera/quality. */
+const TEMPLATE_RENDER_ORDER = [
+  "scene",
+  "lighting",
+  "framing",
+  "camera",
+  "camera_angle",
+  "aspect_ratio",
+  "art_style",
+  "color_palette",
+  "mood",
+  "composition",
+  "detail_level",
+  "post_processing",
+  "time_season",
+  "use_case",
+  "perspective",
+  "constraints",
+] as const;
+
 function identifyScopedDims(
   brief: PromptBrief,
   tpl: TemplateTargetConfig["templateMap"],
@@ -66,8 +105,17 @@ function assembleSubjectPhrase(
 ): string {
   const sep = locale === "zh" ? "，" : ", ";
   const fragments = [subjectPart];
-  for (const item of brief.items) {
-    if (!scopedDims.has(item.questionId)) continue;
+  const itemsById = new Map(brief.items.map((item) => [item.questionId, item]));
+  const orderedIds: string[] = [];
+  for (const qid of SCOPED_DIM_ORDER) {
+    if (scopedDims.has(qid)) orderedIds.push(qid);
+  }
+  for (const qid of scopedDims) {
+    if (!orderedIds.includes(qid)) orderedIds.push(qid);
+  }
+  for (const qid of orderedIds) {
+    const item = itemsById.get(qid);
+    if (!item) continue;
     const text = optionText(item, locale);
     if (text) fragments.push(text);
   }
@@ -94,7 +142,16 @@ function render(
     if (partsEn.subject) enPhrases.push(assembleSubjectPhrase(brief, partsEn.subject, scopedDims, "en"));
   }
 
+  for (const key of TEMPLATE_RENDER_ORDER) {
+    if (!(key in tpl)) continue;
+    const zhPart = parts[key];
+    const enPart = partsEn[key];
+    if (zhPart) zhPhrases.push(zhPart);
+    if (enPart) enPhrases.push(enPart);
+  }
+
   for (const key of Object.keys(tpl)) {
+    if ((TEMPLATE_RENDER_ORDER as readonly string[]).includes(key)) continue;
     if (key === "subject" && useAssembly) continue;
     const zhPart = parts[key];
     const enPart = partsEn[key];

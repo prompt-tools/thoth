@@ -50,13 +50,12 @@ describe("conflictIdsFor (A2)", () => {
 // ── computeFillSet ──────────────────────────────────────────────────────
 
 describe("computeFillSet (A3)", () => {
-  it("returns secondary-only dimensions for 人画像 simple", () => {
+  it("returns secondary-only dimensions for 人像 simple", () => {
     const fill = computeFillSet("人像", [], manifest);
     expect(fill.length).toBeGreaterThan(0);
     expect(fill.length).toBeLessThanOrEqual(4);
 
-    // P2: lighting + color_palette demoted to secondary in 人像 branch
-    const essentialIds = ["subject", "framing", "scene"];
+    const essentialIds = ["subject", "person_type", "gender_presentation", "framing", "portrait_expression"];
     for (const eid of essentialIds) {
       expect(fill).not.toContain(eid);
     }
@@ -93,19 +92,123 @@ describe("computeFillSet (A3)", () => {
     expect(fill1.length).toBeLessThanOrEqual(1);
   });
 
+  it("boosts hair into the fill cap when the seed mentions silver hair", () => {
+    const history: AgentHistoryItem[] = [
+      { questionId: "subject", selectedOptionIds: ["image_subject:game_character"] },
+      { questionId: "person_type", selectedOptionIds: ["image_person_type:game_character"] },
+      { questionId: "gender_presentation", selectedOptionIds: ["image_gender_presentation:masculine"] },
+      { questionId: "framing", selectedOptionIds: ["image_framing:medium_shot"] },
+      { questionId: "portrait_expression", selectedOptionIds: ["image_portrait_expression:confident"] },
+    ];
+    const plain = computeFillSet("人像", history, manifest, 4, undefined, "普通描述");
+    const boosted = computeFillSet("人像", history, manifest, 4, undefined, "银发剑士游戏立绘");
+    expect(plain).toContain("hair");
+    expect(boosted[0]).toBe("hair");
+  });
+
+  it("boosts render style when the seed mentions otome", () => {
+    const history: AgentHistoryItem[] = [
+      { questionId: "subject", selectedOptionIds: ["image_subject:otome_character"] },
+      { questionId: "person_type", selectedOptionIds: ["image_person_type:otome_visual_novel"] },
+      { questionId: "gender_presentation", selectedOptionIds: ["image_gender_presentation:masculine"] },
+      { questionId: "framing", selectedOptionIds: ["image_framing:close_up"] },
+      { questionId: "portrait_expression", selectedOptionIds: ["image_portrait_expression:tender"] },
+    ];
+    const boosted = computeFillSet("人像", history, manifest, 4, undefined, "乙游男主 POV 心动对视");
+    expect(boosted).toContain("character_render_style");
+  });
+
+  it("uses cap 5 when seed boost applies", () => {
+    const history: AgentHistoryItem[] = [
+      { questionId: "subject", selectedOptionIds: ["image_subject:game_character"] },
+      { questionId: "person_type", selectedOptionIds: ["image_person_type:game_character"] },
+      { questionId: "gender_presentation", selectedOptionIds: ["image_gender_presentation:masculine"] },
+      { questionId: "framing", selectedOptionIds: ["image_framing:medium_shot"] },
+      { questionId: "portrait_expression", selectedOptionIds: ["image_portrait_expression:confident"] },
+    ];
+    const plain = computeFillSet("人像", history, manifest, 4, undefined, "普通描述");
+    const boosted = computeFillSet("人像", history, manifest, 5, undefined, "银发剑士游戏立绘");
+    expect(plain.length).toBeLessThanOrEqual(4);
+    expect(boosted.length).toBe(5);
+  });
+
+  it("P0-1: default fill cap includes lighting, hair, and pose for portrait", () => {
+    const history: AgentHistoryItem[] = [
+      { questionId: "subject", selectedOptionIds: ["image_subject:beautiful_woman"] },
+      { questionId: "person_type", selectedOptionIds: ["image_person_type:realistic_portrait"] },
+      { questionId: "gender_presentation", selectedOptionIds: ["image_gender_presentation:feminine"] },
+      { questionId: "framing", selectedOptionIds: ["image_framing:medium_shot"] },
+      { questionId: "portrait_expression", selectedOptionIds: ["image_portrait_expression:gentle"] },
+    ];
+    const fill = computeFillSet("人像", history, manifest, 4, undefined, "普通女生写真");
+    expect(fill).toContain("lighting");
+    expect(fill).toContain("hair");
+    expect(fill).toContain("pose");
+  });
+
+  it("P0-5: omits age_band from cap when seed has no age cue", () => {
+    const history: AgentHistoryItem[] = [
+      { questionId: "subject", selectedOptionIds: ["image_subject:beautiful_woman"] },
+      { questionId: "person_type", selectedOptionIds: ["image_person_type:realistic_portrait"] },
+      { questionId: "gender_presentation", selectedOptionIds: ["image_gender_presentation:feminine"] },
+      { questionId: "framing", selectedOptionIds: ["image_framing:medium_shot"] },
+      { questionId: "portrait_expression", selectedOptionIds: ["image_portrait_expression:gentle"] },
+    ];
+    const fill = computeFillSet("人像", history, manifest, 4, undefined, "普通女生写真");
+    expect(fill).not.toContain("age_band");
+  });
+
+  it("P0-4: default fill prefers pose over outfit in cap", () => {
+    const history: AgentHistoryItem[] = [
+      { questionId: "subject", selectedOptionIds: ["image_subject:beautiful_woman"] },
+      { questionId: "person_type", selectedOptionIds: ["image_person_type:realistic_portrait"] },
+      { questionId: "gender_presentation", selectedOptionIds: ["image_gender_presentation:feminine"] },
+      { questionId: "framing", selectedOptionIds: ["image_framing:medium_shot"] },
+      { questionId: "portrait_expression", selectedOptionIds: ["image_portrait_expression:gentle"] },
+    ];
+    const fill = computeFillSet("人像", history, manifest, 5, undefined, "普通女生写真");
+    expect(fill).toContain("pose");
+    expect(fill).not.toContain("outfit");
+  });
+
+  it("P0-4: outfit seed keeps outfit and drops pose from fill cap", () => {
+    const history: AgentHistoryItem[] = [
+      { questionId: "subject", selectedOptionIds: ["image_subject:beautiful_woman"] },
+      { questionId: "person_type", selectedOptionIds: ["image_person_type:realistic_portrait"] },
+      { questionId: "gender_presentation", selectedOptionIds: ["image_gender_presentation:feminine"] },
+      { questionId: "framing", selectedOptionIds: ["image_framing:medium_shot"] },
+      { questionId: "portrait_expression", selectedOptionIds: ["image_portrait_expression:gentle"] },
+    ];
+    const fill = computeFillSet("人像", history, manifest, 5, undefined, "穿婚纱的新娘");
+    expect(fill).toContain("outfit");
+    expect(fill).not.toContain("pose");
+  });
+
+  it("P1-8 fill path: drops aspect_ratio after framing without camera seed", () => {
+    const history: AgentHistoryItem[] = [
+      { questionId: "subject", selectedOptionIds: ["image_subject:beautiful_woman"] },
+      { questionId: "person_type", selectedOptionIds: ["image_person_type:realistic_portrait"] },
+      { questionId: "gender_presentation", selectedOptionIds: ["image_gender_presentation:feminine"] },
+      { questionId: "framing", selectedOptionIds: ["image_framing:medium_shot"] },
+      { questionId: "portrait_expression", selectedOptionIds: ["image_portrait_expression:gentle"] },
+    ];
+    const fill = computeFillSet("人像", history, manifest, 10, undefined, "普通女生写真");
+    expect(fill).not.toContain("aspect_ratio");
+    expect(fill).not.toContain("camera_angle");
+  });
+
   it("returns empty for types with no secondary remaining", () => {
     const fill = computeFillSet("通用", [], manifest);
     expect(fill.length).toBeLessThanOrEqual(4);
   });
 
-  it("returns empty when all secondary already asked", () => {
-    // P2: color_palette is now secondary in 产品/静物 (demoted from essential)
-    const history: AgentHistoryItem[] = [
-      { questionId: "color_palette", selectedOptionIds: ["image_color_palette:neutral_tones"] },
-      { questionId: "composition", selectedOptionIds: ["image_composition:centered"] },
-      { questionId: "art_style", selectedOptionIds: ["image_art_style:photorealistic"] },
-    ];
-    const fill = computeFillSet("产品/静物", history, manifest);
+  it("returns empty when all portrait secondary dimensions are already asked", () => {
+    const allFill = computeFillSet("人像", [], manifest, 40);
+    const history: AgentHistoryItem[] = allFill.map((questionId) => ({
+      questionId,
+      selectedOptionIds: [manifest.find((d) => d.questionId === questionId)!.options[0].id],
+    }));
+    const fill = computeFillSet("人像", history, manifest, 40);
     expect(fill).toEqual([]);
   });
 });
@@ -114,7 +217,7 @@ describe("computeFillSet (A3)", () => {
 
 describe("resolveActiveSet (A1)", () => {
   it("activeDimensions still returns same results as before extraction", () => {
-    const types = ["人像", "产品/静物", "场景/氛围", "动物", "食物/饮品", "通用"];
+    const types = ["人像", "通用"];
     const precisions = ["simple", "standard", "detailed"] as const;
 
     for (const type of types) {

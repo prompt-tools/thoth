@@ -157,15 +157,15 @@ function DescribeStep({
   return (
     <section className="rounded-md border border-slate-200 bg-white p-5">
       <PrecisionSelector value={precision} onChange={onPrecisionChange} />
-      <h2 className="mt-4 text-base font-semibold text-slate-950">用一句话说说你想要的图</h2>
+      <h2 className="mt-4 text-base font-semibold text-slate-950">用一句话说说你想要的人物或角色</h2>
       <p className="mt-1 text-sm leading-6 text-slate-600">
-        随便说，比如「海边回眸的女生，胶片感」或「白底的耳机产品图」。AI 会据此判断该问哪些问题；不想写也可以直接开始。
+        随便说，比如「海边回眸的女生，胶片感」或「乙游男主牵手 POV」。若描述的是产品、动物或纯风景，请改写成人物/角色场景；AI 会据此决定先问哪些维度。画质负向词与未成年保护会自动写入最终 prompt，无需单独选择。
       </p>
       <textarea
         value={text}
         onChange={(e) => setText(e.target.value)}
         rows={3}
-        placeholder="例如：日落雪山的壮阔风景，电影感"
+        placeholder="例如：银发游戏角色立绘，清冷神秘，夜色城堡背景"
         className="mt-3 w-full resize-y rounded-md border border-slate-300 px-3 py-2 text-sm leading-6 focus:border-slate-900 focus:outline-none"
       />
       <div className="mt-4 flex flex-wrap items-center gap-3">
@@ -319,8 +319,8 @@ function AgentDemo() {
     reconfigure,
     precision,
     setPrecision,
-    primaryType,
     autoFilledSummary,
+    builtinDemo,
   } = useAgentGuideController();
 
   if (phase === "needsKey") {
@@ -341,26 +341,35 @@ function AgentDemo() {
         <header className="flex flex-col gap-2 border-b border-slate-200 pb-5">
           <div className="flex flex-wrap items-center gap-2 text-sm font-medium text-slate-600">
             <Sparkles className="h-4 w-4" />
-            Agent 自适应向导 · 本地原型
-            <span className="rounded-md bg-indigo-50 px-2 py-0.5 text-xs text-indigo-800">BYOK</span>
+            人像/角色自适应向导
+            {builtinDemo ? (
+              <span className="rounded-md bg-emerald-50 px-2 py-0.5 text-xs text-emerald-800">内置模型</span>
+            ) : (
+              <span className="rounded-md bg-indigo-50 px-2 py-0.5 text-xs text-indigo-800">BYOK</span>
+            )}
           </div>
           <h1 className="text-2xl font-semibold tracking-normal md:text-3xl">
-            AI 决定下一步问什么
+            AI 帮你生成可控人像提示词
           </h1>
           <p className="max-w-3xl text-sm leading-6 text-slate-600">
-            不再一次性铺开所有选择题：AI 根据你已有的选择，动态决定下一题与该题的候选选项。最终提示词仍由你选中的选项确定性拼接。
+            只服务人物、人像和角色生成：AI 根据你已有的选择，动态决定下一题与该题的候选选项。最终提示词由选项确定性拼接；画质负向词与未成年保护自动附加。
           </p>
           <p className="text-xs text-slate-500">
-            <Link href="/" className="text-teal-700 hover:underline">
-              ← 返回线上版
-            </Link>
-            {" · "}
-            服务商：{provider.label}
-            {" · "}
-            <button type="button" onClick={reconfigure} className="text-teal-700 hover:underline">
-              切换
-            </button>
-            {" · "}
+            {builtinDemo ? (
+              <>
+                模型：DeepSeek（内置，无需 API Key）
+                {" · "}
+              </>
+            ) : (
+              <>
+                服务商：{provider.label}
+                {" · "}
+                <button type="button" onClick={reconfigure} className="text-teal-700 hover:underline">
+                  切换
+                </button>
+                {" · "}
+              </>
+            )}
             目录维度：{manifest.length}
           </p>
         </header>
@@ -405,9 +414,7 @@ function AgentDemo() {
           <section className="rounded-md border border-slate-200 bg-white p-5">
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
               <PrecisionSelector value={precision} onChange={setPrecision} />
-              {primaryType !== "通用" ? (
-                <span className="text-xs text-slate-400">识别为：{primaryType}</span>
-              ) : null}
+              <span className="text-xs text-slate-400">当前方向：人像/角色</span>
             </div>
             {loading || !currentDimension ? (
               <div className="flex items-center gap-2 py-10 text-sm text-slate-500">

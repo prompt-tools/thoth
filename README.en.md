@@ -6,11 +6,11 @@ Language switcher / 语言切换
 
 ---
 
-# thoth · Controllable Image Prompt Guide
+# thoth · Portrait & Character Prompt Guide
 
-> An **image-only** prompt wizard for non-expert users. Turn vague ideas into
-> copy-ready prompts for generic image models through guided choices — no jargon,
-> no API key of your own.
+> A **portrait and character** prompt wizard for non-expert users. Turn vague
+> ideas like attractive women/men, game characters, novel protagonists, otome
+> characters, and virtual idols into copy-ready prompts through guided choices.
 >
 > **v0.1.0** — AI-adaptive build, live on Vercel. Feedback welcome.
 
@@ -30,13 +30,14 @@ npm run dev
 
 ## How it works
 
-1. Describe the image in one line (or skip).
+1. Describe the person or character in one line (or skip).
 2. An AI agent **decides the next question** — and that question's candidate
    options — from what you've already chosen, instead of dumping every field at once.
 3. Dimensions you skip are **auto-filled** to match your chosen style (editable in
    the result).
 4. The final prompt is **deterministically stitched** from your selected options —
-   no AI rewriting of meaning. Outputs Chinese + English prompts.
+   no AI rewriting of meaning. Quality negatives and minor-protection constraints
+   are **appended automatically** — no separate step. Outputs Chinese + English prompts.
 
 Two precision tiers: **Simple** (a few core questions) / **Pro** (asks more, with a
 per-question "show all options" disclosure).
@@ -57,16 +58,27 @@ Next.js 15 · TypeScript 5.7 · React 19 · Tailwind CSS v3 · Vitest 4. Deploye
 Vercel: `/api/llm` proxies the model server-side (built-in key); `/api/telemetry`
 records each step for analysis.
 
-## Scope (this repo)
+## Portrait Dimensions
 
-| Item | Value |
-|------|--------|
-| Work type | `image_prompt` only |
-| Target | `generic_image` only |
-| Options | Under `src/lib/prompt/options/image/` |
+**Retained visual dimensions:** use case · portrait subject · scene · composition · lighting · art style · color · mood · framing · camera angle · aspect ratio · detail · post-processing
 
-For **video** (Seedance, Veo 3, etc.) and work-type switching, use the
-[main repository](https://github.com/prompt-tools/controllable-prompt-guide).
+**Automatic (not asked):** quality negatives (bad anatomy, low quality, distorted face, extra fingers, plastic skin, etc.) + no sexualized minors
+
+**Portrait-specific dimensions:**
+- Portrait direction — realistic portrait, beautiful woman, handsome man, game character, novel character, otome/visual novel, anime, virtual idol/OC, cosplay
+- Identity features — gender presentation, age band, skin tone/texture, face/features, body type
+- Character design — archetype, render style, fictional role temperament
+- Styling and action — expression, pose, outfit, hair, action/interaction, prop or POV relationship
+
+Products, animals, architecture, food, and landscapes no longer exist as subject branches; they can only appear as background, props, or scene elements.
+
+## Related
+
+| Repo | Purpose |
+|------|---------|
+| **thoth** (this repo) | Production app on Vercel |
+| **[controllable-image-prompt-guide](https://github.com/prompt-tools/controllable-image-prompt-guide)** | Dev + eval repo: agent eval harness |
+| **[cipg-eval-test](https://github.com/prompt-tools/cipg-eval-test)** | Private eval bed: GitHub Actions + DeepSeek scheduled runs |
 
 ## License
 

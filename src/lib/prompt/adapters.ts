@@ -1,8 +1,7 @@
 import { buildPromptBrief } from "./brief";
 import { evaluatePromptQuality } from "./heuristics";
-import { resolveAdapter, resolveTarget } from "./registry";
+import { getOptionById, resolveAdapter, resolveTarget } from "./registry";
 import type {
-  LocalizedText,
   NegativePromptTier,
   PromptSelections,
   RenderedPrompt,
@@ -24,6 +23,29 @@ import { IMAGE_TARGET_ID } from "./types";
 // All real consumers (layout.tsx, prompt-guide/index.tsx, test/setup.ts)
 // already import init.
 
+/** Portrait safety/quality negatives — always appended; not user-selectable. */
+function appendAutomaticConstraints(
+  rendered: RenderedPrompt,
+  constraintIds: readonly string[],
+): RenderedPrompt {
+  const zhExtra: string[] = [];
+  const enExtra: string[] = [];
+  for (const id of constraintIds) {
+    const opt = getOptionById(id);
+    if (!opt) continue;
+    const zh = opt.promptFragment.zh.trim();
+    const en = opt.promptFragment.en.trim();
+    if (zh && !rendered.zhPrompt.includes(zh)) zhExtra.push(zh);
+    if (en && !rendered.enPrompt.includes(en)) enExtra.push(en);
+  }
+  if (zhExtra.length === 0 && enExtra.length === 0) return rendered;
+  return {
+    ...rendered,
+    zhPrompt: zhExtra.length > 0 ? `${rendered.zhPrompt}，${zhExtra.join("，")}` : rendered.zhPrompt,
+    enPrompt: enExtra.length > 0 ? `${rendered.enPrompt}, ${enExtra.join(", ")}` : rendered.enPrompt,
+  };
+}
+
 export function renderPrompt(params: {
   workType: WorkTypeConfig;
   rawIntent: string;
@@ -34,31 +56,21 @@ export function renderPrompt(params: {
 }): RenderedPrompt {
   const target = resolveTarget(IMAGE_TARGET_ID);
   const adapter = resolveAdapter();
+  // Constraints are injected automatically — never part of the user's choices.
+  const { constraints: _omit, ...selectionsWithoutConstraints } = params.selections;
+  void _omit;
+
   const brief = buildPromptBrief({
     workType: params.workType,
     targetToolId: IMAGE_TARGET_ID,
     rawIntent: params.rawIntent,
-    selections: params.selections,
+    selections: selectionsWithoutConstraints,
     freeTexts: params.freeTexts
   });
 
   let rendered = adapter.render(brief, params.negPromptTier);
-
-  const constraintsItem = brief.items.find(
-    (item) => item.questionId === "constraints"
-  );
-  if (constraintsItem && target.safetyDefaults.length > 0) {
-    const selectedIds = new Set(
-      constraintsItem.selectedOptions.map((opt) => opt.id)
-    );
-    const missing = target.safetyDefaults.filter((id) => !selectedIds.has(id));
-    if (missing.length > 0) {
-      const warning: LocalizedText = {
-        zh: `已取消预选的安全约束：${missing.join("、")}。这可能影响生成结果的安全合规性。`,
-        en: `Safety defaults deselected: ${missing.join(", ")}. This may affect output safety compliance.`
-      };
-      rendered = { ...rendered, warnings: [...rendered.warnings, warning] };
-    }
+  if (target.safetyDefaults.length > 0) {
+    rendered = appendAutomaticConstraints(rendered, target.safetyDefaults);
   }
 
   const heuristicWarnings = evaluatePromptQuality(

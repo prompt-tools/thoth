@@ -10,6 +10,7 @@ import { logAgent } from "./debug-log";
 import { routePrimaryType } from "./routing";
 import { activeDimensions } from "./active-dimensions";
 import type { Precision } from "./gradient";
+import { GRADIENT } from "./gradient";
 import { conflictIdsFor, suggestedIdsFor } from "./audit-model";
 
 const ANTHROPIC_VERSION = "2023-06-01";
@@ -215,7 +216,7 @@ export function buildTurnRequest(
 
   // C-9b: use gradient routing + activeDimensions instead of OVERALL gate
   const type = routePrimaryType(userDescription ?? "");
-  const { ordered, done } = activeDimensions(type, precision, history);
+  const { ordered, done } = activeDimensions(type, precision, history, GRADIENT, userDescription);
 
   // Build pool from ordered dimension ids
   const pool = ordered
@@ -243,8 +244,8 @@ export function buildTurnRequest(
     filteredCurrentOptionIds: [],
   };
 
-  // Pre-filter subject options by primary type so the model only sees relevant
-  // categories (e.g., for "动物" only pet_animal + wildlife, never food_beverage).
+  // Pre-filter subject options by the portrait-only category so the model never
+  // sees product/animal/food subjects even on fallback paths.
   const currentDim = pool[0];
   let optionsForModel = currentDim?.options ?? [];
   if (currentQid === "subject" && type !== "通用") {

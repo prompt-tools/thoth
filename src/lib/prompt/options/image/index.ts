@@ -21,19 +21,18 @@ import { imageCameraOptions } from "./image-camera.options";
 import { imagePoseOptions } from "./image-pose.options";
 import { imageOutfitOptions } from "./image-outfit.options";
 import { imageHairOptions } from "./image-hair.options";
-import { imageProductMaterialOptions } from "./image-product-material.options";
-import { imageWeatherOptions } from "./image-weather.options";
-import { imageAnimalBreedOptions } from "./image-animal-breed.options";
-import { imageAnimalCoatOptions } from "./image-animal-coat.options";
-import { imageAnimalPoseOptions } from "./image-animal-pose.options";
-import { imageAnimalExpressionOptions } from "./image-animal-expression.options";
-import { imageArchStyleOptions } from "./image-arch-style.options";
-import { imageArchTypeOptions } from "./image-arch-type.options";
-import { imageArchMaterialOptions } from "./image-arch-material.options";
-import { imageArchViewpointOptions } from "./image-arch-viewpoint.options";
 import { imagePortraitExpressionOptions } from "./image-portrait-expression.options";
-import { imageFoodStateOptions } from "./image-food-state.options";
-import { imageFoodTablewareOptions } from "./image-food-tableware.options";
+import { imagePersonTypeOptions } from "./image-person-type.options";
+import { imageGenderPresentationOptions } from "./image-gender-presentation.options";
+import { imageAgeBandOptions } from "./image-age-band.options";
+import { imageSkinToneOptions } from "./image-skin-tone.options";
+import { imageFaceFeaturesOptions } from "./image-face-features.options";
+import { imageBodyTypeOptions } from "./image-body-type.options";
+import { imageCharacterArchetypeOptions } from "./image-character-archetype.options";
+import { imageCharacterRenderStyleOptions } from "./image-character-render-style.options";
+import { imageCharacterInteractionOptions } from "./image-character-interaction.options";
+import { imageMakeupOptions } from "./image-makeup.options";
+import { imageCharacterPropsOptions } from "./image-character-props.options";
 
 const imageOptionSets = [
   imagePublishScenarioOptions,
@@ -57,23 +56,18 @@ const imageOptionSets = [
   imagePoseOptions,
   imageOutfitOptions,
   imageHairOptions,
-  imageProductMaterialOptions,
-  imageWeatherOptions,
-  // P4: animal attribute dims (scoped to pet_animal / wildlife)
-  imageAnimalBreedOptions,
-  imageAnimalCoatOptions,
-  imageAnimalPoseOptions,
-  imageAnimalExpressionOptions,
-  // P5: architecture attribute dims (scoped to architectural_exterior / interior_space)
-  imageArchStyleOptions,
-  imageArchTypeOptions,
-  imageArchMaterialOptions,
-  imageArchViewpointOptions,
-  // P6: portrait expression (scoped to single_person / character_design)
   imagePortraitExpressionOptions,
-  // P7: food attribute dims (scoped to food_item / beverage_item)
-  imageFoodStateOptions,
-  imageFoodTablewareOptions,
+  imagePersonTypeOptions,
+  imageGenderPresentationOptions,
+  imageAgeBandOptions,
+  imageSkinToneOptions,
+  imageFaceFeaturesOptions,
+  imageBodyTypeOptions,
+  imageCharacterArchetypeOptions,
+  imageCharacterRenderStyleOptions,
+  imageCharacterInteractionOptions,
+  imageMakeupOptions,
+  imageCharacterPropsOptions,
 ] satisfies OptionSet[];
 
 for (const set of imageOptionSets) {

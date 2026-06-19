@@ -20,7 +20,7 @@ const imageWorkType = resolveWorkType("image_prompt");
 
 const imageSelections: PromptSelections = {
   use_case: "image_use_case:social_media_post",
-  subject: "image_subject:hero_product",
+  subject: "image_subject:single_person",
   scene: "image_scene:studio_env",
   composition: "image_composition:centered",
   lighting: "image_lighting:soft_dreamy",
@@ -129,47 +129,43 @@ describe("prompt configuration validation (image-only)", () => {
     expect(errors[0]).toContain("nonexistent_option");
   });
 
-  it("warns when safety defaults are deselected from generic_image output (TEST-08)", () => {
-    const unsafe: PromptSelections = {
-      ...imageSelections,
-      constraints: ["image_constraints:no_cluttered"],
-    };
-
+  it("appends automatic quality and minor-protection negatives (TEST-08)", () => {
     const result = renderPrompt({
       workType: imageWorkType,
       rawIntent: "",
-      selections: unsafe,
+      selections: {
+        ...imageSelections,
+        constraints: ["image_constraints:no_cluttered"],
+      },
     });
 
-    expect(result.warnings.length).toBeGreaterThanOrEqual(1);
-    const zhWarnings = result.warnings.map((w) => w.zh).join("");
-    expect(zhWarnings).toContain("已取消预选的安全约束");
-    expect(zhWarnings).toContain("image_constraints:no_ip_celebrity");
+    expect(result.zhPrompt).toContain("避免未成年或青少年角色的性感化");
+    expect(result.zhPrompt).toContain("避免畸形、多余肢体和面部扭曲");
+    expect(result.zhPrompt).not.toContain("避免名人肖像");
+    expect(result.warnings.some((w) => w.zh.includes("已取消预选的安全约束"))).toBe(false);
   });
 
   it("respects maxSelections cap on multi-select constraints (TEST-09)", () => {
-    const overMax: PromptSelections = {
-      ...imageSelections,
-      constraints: [
-        "image_constraints:no_ip_celebrity",
-        "image_constraints:no_nsfw",
-        "image_constraints:no_bad_anatomy",
-        "image_constraints:no_low_quality",
-        "image_constraints:no_text",
-        "image_constraints:no_watermark",
-      ],
-    };
-
     const result = renderPrompt({
       workType: imageWorkType,
       rawIntent: "",
-      selections: overMax,
+      selections: {
+        ...imageSelections,
+        constraints: [
+          "image_constraints:no_ip_celebrity",
+          "image_constraints:no_nsfw",
+          "image_constraints:no_bad_anatomy",
+          "image_constraints:no_low_quality",
+          "image_constraints:no_text",
+          "image_constraints:no_watermark",
+        ],
+      },
     });
 
     expect(result.zhPrompt.length).toBeGreaterThan(0);
     const constraintsItem = result.brief.items.find((i) => i.questionId === "constraints");
-    expect(constraintsItem).toBeDefined();
-    expect(constraintsItem!.selectedOptions.length).toBeLessThanOrEqual(4);
+    expect(constraintsItem).toBeUndefined();
+    expect(result.zhPrompt).toContain("避免畸形、多余肢体和面部扭曲");
   });
 });
 

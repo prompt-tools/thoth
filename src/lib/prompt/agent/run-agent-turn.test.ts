@@ -36,10 +36,10 @@ function sequenceTransport(responses: unknown[]) {
 describe("buildTurnRequest (C-9b gradient)", () => {
   it("nextQuestionId = ordered[0] from activeDimensions", () => {
     const { ctx } = buildTurnRequest(provider, "test-key", { manifest, history: [], userDescription: "" });
-    const { ordered } = activeDimensions("通用", "simple", []);
+    const { ordered } = activeDimensions("人像", "simple", []);
     expect(ctx.currentQuestionId).toBe(ordered[0]);
     expect(ctx.remainingEmpty).toBe(false);
-    expect(ctx.type).toBe("通用");
+    expect(ctx.type).toBe("人像");
     expect(ctx.precision).toBe("simple");
   });
 
@@ -128,7 +128,7 @@ describe("runAgentTurn (C-9b gradient)", () => {
     );
 
     // Should fall back to ALL options for the current dimension
-    const { ordered } = activeDimensions("通用", "simple", []);
+    const { ordered } = activeDimensions("人像", "simple", []);
     const currentDim = manifest.find((d) => d.questionId === ordered[0])!;
     expect(decision.visibleOptionIds).toEqual(currentDim.options.map((o) => o.id));
     expect(decision.done).toBe(false);
@@ -149,8 +149,8 @@ describe("runAgentTurn (C-9b gradient)", () => {
     expect(diagnostics.source).toBe("fallback");
   });
 
-  // ⑥ P0-A: subject pre-filter — model only receives category-matched options
-  it("⑥ 动物 subject turn: options JSON contains only pet_animal + wildlife", async () => {
+  // ⑥ Portrait-only subject pre-filter — model only receives people options
+  it("⑥ pure animal description still receives only portrait subject options", async () => {
     let capturedOptions: string[] = [];
     const transport = async (req: unknown) => {
       const body = (req as { body: Record<string, unknown> }).body;
@@ -162,7 +162,7 @@ describe("runAgentTurn (C-9b gradient)", () => {
         const opts = JSON.parse(match[1]) as Array<{ id: string }>;
         capturedOptions = opts.map(o => o.id);
       }
-      return makeResp(["image_subject:pet_animal"]);
+      return makeResp(["image_subject:beautiful_woman"]);
     };
 
     await runAgentTurn(
@@ -171,25 +171,26 @@ describe("runAgentTurn (C-9b gradient)", () => {
       transport
     );
 
-    expect(capturedOptions).toContain("image_subject:pet_animal");
-    expect(capturedOptions).toContain("image_subject:wildlife");
+    expect(capturedOptions).toContain("image_subject:single_person");
+    expect(capturedOptions).toContain("image_subject:beautiful_woman");
+    expect(capturedOptions).toContain("image_subject:otome_character");
+    expect(capturedOptions).not.toContain("image_subject:pet_animal");
     expect(capturedOptions).not.toContain("image_subject:food_beverage");
-    expect(capturedOptions).not.toContain("image_subject:single_person");
-    expect(capturedOptions.length).toBe(2); // only the 2 animal options
   });
 
-  // ⑦ P0-A fallback: invalid options → falls back to filtered set, not full catalog
-  it("⑦ 动物 subject fallback uses filtered options, not full catalog", async () => {
+  // ⑦ fallback: invalid options → falls back to portrait subject set, not full catalog
+  it("⑦ subject fallback uses portrait options, not non-portrait catalog", async () => {
     const { decision } = await runAgentTurn(
       provider, "test-key",
       { manifest, history: [], userDescription: "橘色小猫" },
       async () => makeResp(["image_fake:nonexistent"])
     );
 
-    expect(decision.visibleOptionIds).toContain("image_subject:pet_animal");
-    expect(decision.visibleOptionIds).toContain("image_subject:wildlife");
+    expect(decision.visibleOptionIds).toContain("image_subject:single_person");
+    expect(decision.visibleOptionIds).toContain("image_subject:beautiful_woman");
+    expect(decision.visibleOptionIds).toContain("image_subject:handsome_man");
+    expect(decision.visibleOptionIds).not.toContain("image_subject:pet_animal");
     expect(decision.visibleOptionIds).not.toContain("image_subject:food_beverage");
-    expect(decision.visibleOptionIds).not.toContain("image_subject:single_person");
   });
 });
 

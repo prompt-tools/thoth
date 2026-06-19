@@ -11,7 +11,8 @@ export const imageConstraintsOptions: OptionSet = {
       optionIds: [
         "image_constraints:no_bad_anatomy", "image_constraints:no_low_quality",
         "image_constraints:no_distorted_face", "image_constraints:no_extra_limbs",
-        "image_constraints:no_bad_proportions", "image_constraints:no_cloned_face"
+        "image_constraints:no_extra_fingers", "image_constraints:no_bad_proportions",
+        "image_constraints:no_cloned_face", "image_constraints:no_plastic_skin"
       ]
     },
     {
@@ -27,7 +28,8 @@ export const imageConstraintsOptions: OptionSet = {
       id: "cat:image_constraints:safety",
       label: { zh: "安全/合规", en: "Safety / Compliance" },
       optionIds: [
-        "image_constraints:no_ip_celebrity", "image_constraints:no_nsfw", "image_constraints:no_style_clash"
+        "image_constraints:no_ip_celebrity", "image_constraints:no_nsfw",
+        "image_constraints:no_sexualized_minors", "image_constraints:no_style_clash"
       ]
     }
   ],
@@ -72,6 +74,26 @@ export const imageConstraintsOptions: OptionSet = {
       promptFragment: { zh: "避免多出肢体、融合的身体部位", en: "avoid extra limbs, fused body parts, and conjoined figures" },
       appliesTo: ["generic_image"],
       riskHint: { zh: "多人场景和复杂姿态时更常见此问题", en: "More common in multi-person scenes and complex poses." }
+    },
+    {
+      id: "image_constraints:no_extra_fingers",
+      version: "0.1.0",
+      label: { zh: "避免多手指", en: "Avoid extra fingers" },
+      plain: { zh: "防止手部出现多余手指或畸形关节", en: "Prevent extra fingers or malformed hand joints" },
+      professionalTerms: ["extra fingers", "malformed hands", "six fingers", "deformed fingers"],
+      promptFragment: { zh: "避免多手指、畸形手部和不自然的手部结构", en: "avoid extra fingers, malformed hands, and unnatural hand structure" },
+      appliesTo: ["generic_image"],
+      riskHint: { zh: "人像与手部入镜场景最常见，建议默认启用。", en: "Most common in portraits and hand-visible scenes — recommended as default." }
+    },
+    {
+      id: "image_constraints:no_plastic_skin",
+      version: "0.1.0",
+      label: { zh: "避免塑料磨皮", en: "Avoid plastic / over-smoothed skin" },
+      plain: { zh: "防止皮肤过度磨皮、蜡像感或失去真实纹理", en: "Prevent over-smoothed, waxy, or textureless skin" },
+      professionalTerms: ["plastic skin", "over-smoothed", "waxy skin", "airbrushed", "uncanny skin"],
+      promptFragment: { zh: "避免过度磨皮、塑料感和蜡像质感，保留自然皮肤纹理", en: "avoid over-smoothed plastic or waxy skin — preserve natural skin texture" },
+      appliesTo: ["generic_image"],
+      riskHint: { zh: "真人写真与半写实角色尤其需要，否则容易失去肤质真实感。", en: "Critical for realistic and semi-realistic portraits to preserve believable skin." }
     },
     {
       id: "image_constraints:no_bad_proportions",
@@ -176,6 +198,16 @@ export const imageConstraintsOptions: OptionSet = {
       promptFragment: { zh: "避免成人、露骨或不适宜的内容", en: "avoid NSFW, explicit, and inappropriate content" },
       appliesTo: ["generic_image"],
       riskHint: { zh: "平台安全合规要求。多数生成平台会直接拦截含违规关键词的请求。", en: "Platform safety compliance. Most platforms block requests with policy-violating keywords." }
+    },
+    {
+      id: "image_constraints:no_sexualized_minors",
+      version: "0.1.0",
+      label: { zh: "避免未成年性感化", en: "Avoid sexualized minors" },
+      plain: { zh: "禁止将未成年人或青少年角色做性感化、暧昧化表达", en: "Forbid sexualized or suggestive depictions of minors or teen characters" },
+      professionalTerms: ["no sexualized minors", "age-appropriate", "non-suggestive youth"],
+      promptFragment: { zh: "避免未成年或青少年角色的性感化、暧昧化和不当暴露", en: "avoid sexualized, suggestive, or inappropriate depictions of minors and teen characters" },
+      appliesTo: ["generic_image"],
+      riskHint: { zh: "人像产品安全底线。青少年角色只允许非性感、非暧昧表达。", en: "Portrait safety baseline — teen characters must stay non-sexual and non-suggestive." }
     },
     {
       id: "image_constraints:no_style_clash",

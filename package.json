@@ -9,7 +9,13 @@
     "test": "vitest run",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "verify": "npm run typecheck && npm run lint -- --max-warnings=0 && npm test && NODE_ENV=production npm run build"
+    "verify": "npm run typecheck && npm run lint -- --max-warnings=0 && npm test && NODE_ENV=production npm run build",
+    "eval": "tsx .research/scripts/eval-agent.mjs --seeds .research/eval-seeds/portrait-seeds.txt",
+    "eval:report": "tsx .research/scripts/eval-report.mjs",
+    "analyze-prompts": "tsx .research/scripts/analyze-portrait-prompts.mjs",
+    "compare-corpus": "tsx .research/scripts/compare-eval-corpus.mjs",
+    "structure-plan": "tsx .research/scripts/portrait-structure-plan.mjs",
+    "sample-seeds": "tsx .research/scripts/sample-portrait-seeds.mjs"
   },
   "engines": {
     "node": ">=22.6"

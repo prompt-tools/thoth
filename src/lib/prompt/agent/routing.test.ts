@@ -1,45 +1,70 @@
 import { describe, it, expect } from "vitest";
-import { routePrimaryType } from "./routing";
+import { routePrimaryType, suggestedIdsFromDescription, inferSubjectOptionIds } from "./routing";
 
-describe("routePrimaryType", () => {
-  it("人像 signal → 人像", () => {
+describe("routePrimaryType portrait-only routing", () => {
+  it("routes portrait signals to 人像", () => {
     expect(routePrimaryType("一个女生在海边")).toBe("人像");
-  });
-
-  it("猫和女孩 → 人像 (人优先 over 动物)", () => {
-    expect(routePrimaryType("一个女孩和她的猫")).toBe("人像");
-  });
-
-  it("纯产品词 → 产品/静物", () => {
-    expect(routePrimaryType("白色耳机产品图")).toBe("产品/静物");
-  });
-
-  it("纯场景词 → 场景/氛围", () => {
-    expect(routePrimaryType("星空下的山脉")).toBe("场景/氛围");
-  });
-
-  it("纯动物词 → 动物", () => {
-    expect(routePrimaryType("一只橘猫在沙发上")).toBe("动物");
-  });
-
-  it("纯食物词 → 食物/饮品", () => {
-    expect(routePrimaryType("精致的寿司摆盘")).toBe("食物/饮品");
-  });
-
-  it("empty string → 通用", () => {
-    expect(routePrimaryType("")).toBe("通用");
-  });
-
-  it("gibberish → 通用", () => {
-    expect(routePrimaryType("xyzabc123")).toBe("通用");
-  });
-
-  it("english signal hits", () => {
     expect(routePrimaryType("portrait of a woman")).toBe("人像");
-    expect(routePrimaryType("product photo of headphones")).toBe("产品/静物");
   });
 
-  it("multiple signals of same type → that type", () => {
-    expect(routePrimaryType("城市夜景 street city")).toBe("场景/氛围");
+  it("routes product, scene, animal, and food descriptions to 人像", () => {
+    expect(routePrimaryType("白色耳机产品图")).toBe("人像");
+    expect(routePrimaryType("星空下的山脉")).toBe("人像");
+    expect(routePrimaryType("一只橘猫在沙发上")).toBe("人像");
+    expect(routePrimaryType("精致的寿司摆盘")).toBe("人像");
+  });
+
+  it("routes empty and gibberish descriptions to 人像", () => {
+    expect(routePrimaryType("")).toBe("人像");
+    expect(routePrimaryType("xyzabc123")).toBe("人像");
+  });
+});
+
+describe("suggestedIdsFromDescription", () => {
+  it("suggests portrait subject types from description signals", () => {
+    expect(suggestedIdsFromDescription("乙游男主牵手 POV", "人像")).toEqual(
+      new Set(["image_subject:otome_character"])
+    );
+    expect(suggestedIdsFromDescription("漂亮女生头像", "人像")).toEqual(
+      new Set(["image_subject:beautiful_woman"])
+    );
+    expect(suggestedIdsFromDescription("gacha game character splash art", "人像")).toEqual(
+      new Set(["image_subject:game_character"])
+    );
+  });
+
+  it("suggests game_character from warrior and mecha cues without explicit 游戏", () => {
+    expect(suggestedIdsFromDescription("银发剑士", "人像")).toEqual(
+      new Set(["image_subject:game_character"])
+    );
+    expect(suggestedIdsFromDescription("机甲少女战斗立绘", "人像")).toEqual(
+      new Set(["image_subject:game_character"])
+    );
+  });
+
+  it("suggests character_design from sheet and turnaround cues", () => {
+    expect(suggestedIdsFromDescription("原创角色设定三视图", "人像")).toEqual(
+      new Set(["image_subject:character_design"])
+    );
+  });
+
+  it("does not suggest non-portrait subjects", () => {
+    expect(suggestedIdsFromDescription("一只橘猫", "人像")).toEqual(new Set());
+    expect(suggestedIdsFromDescription("白底耳机产品图", "人像")).toEqual(new Set());
+  });
+});
+
+describe("inferSubjectOptionIds", () => {
+  it("uses description signals then single_person fallback", () => {
+    expect(inferSubjectOptionIds("游戏角色立绘，银发剑士", "人像")).toEqual([
+      "image_subject:game_character",
+    ]);
+    expect(inferSubjectOptionIds("赛博朋克女黑客半身像", "人像")).toEqual([
+      "image_subject:game_character",
+    ]);
+    expect(inferSubjectOptionIds("xyz no signals", "人像")).toEqual([
+      "image_subject:single_person",
+    ]);
+    expect(inferSubjectOptionIds("", "人像")).toEqual([]);
   });
 });
