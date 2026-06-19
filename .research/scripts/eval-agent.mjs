@@ -22,9 +22,12 @@ import { llmAnswer } from "./llm-user/answerer.mjs";
 // ── arg parsing ──────────────────────────────────────────────────────────
 const args = process.argv.slice(2);
 function flag(name, fallback) {
-  const i = args.indexOf(`--${name}`);
-  if (i === -1) return fallback;
-  return args[i + 1] ?? fallback;
+  const key = `--${name}`;
+  let value = fallback;
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === key) value = args[i + 1] ?? fallback;
+  }
+  return value;
 }
 const PROVIDER_ID = flag("provider", "deepseek");
 const MAX_RUNS = Number(flag("max-runs", "4"));
@@ -71,7 +74,14 @@ if (!PROVIDER_PRESETS.some((p) => p.id === PROVIDER_ID)) {
 }
 const provider = getProvider(PROVIDER_ID);
 
-const API_KEY = process.env.CIPG_EVAL_API_KEY;
+const PROVIDER_KEY_ENV = {
+  deepseek: "CIPG_EVAL_API_KEY",
+  mimo: "XIAOMI_API_KEY",
+  stepfun: "STEP_API_KEY",
+  anthropic: "ANTHROPIC_API_KEY",
+};
+const API_KEY =
+  process.env[PROVIDER_KEY_ENV[PROVIDER_ID] ?? "CIPG_EVAL_API_KEY"] ?? process.env.CIPG_EVAL_API_KEY;
 // LLM-as-user provider is configurable (the answerer is provider-agnostic). Default
 // anthropic; deepseek/mimo are OpenAI-shaped fallbacks. NOTE: the user-sim must NOT be
 // the same model family as the JUDGE (MiMo) — using mimo here re-creates the self-bias
@@ -85,7 +95,8 @@ if (ANSWERER === "llm" && !ANSWERER_API_KEY && !DRY_RUN) {
   process.exit(1);
 }
 if (!API_KEY && !DRY_RUN) {
-  console.error("Error: set CIPG_EVAL_API_KEY env var (or use --dry-run for a single mock run).");
+  const keyVar = PROVIDER_KEY_ENV[PROVIDER_ID] ?? "CIPG_EVAL_API_KEY";
+  console.error(`Error: set ${keyVar} env var (or use --dry-run for a single mock run).`);
   process.exit(1);
 }
 

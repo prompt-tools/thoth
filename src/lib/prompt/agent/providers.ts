@@ -58,6 +58,16 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     extraBody: { thinking: { type: "disabled" } },
   },
   {
+    id: "stepfun",
+    label: "阶跃 Step Plan (step-3.5-flash-2603)",
+    format: "openai",
+    // Step 套餐 / Step Plan 推理路径（OpenAI 兼容）
+    baseURL: "https://api.stepfun.com/step_plan/v1",
+    routingModel: "step-3.5-flash-2603",
+    polishModel: "step-3.5-flash-2603",
+    maxTokens: 2048,
+  },
+  {
     id: "anthropic",
     label: "Anthropic (Claude)",
     format: "anthropic",
