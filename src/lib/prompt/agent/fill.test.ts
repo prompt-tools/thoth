@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import "../init";
-import { computeFillSet } from "./fill";
+import { computeFillSet, heuristicFillGaps, missingPortraitCoreFill } from "./fill";
 import { resolveActiveSet, activeDimensions } from "./active-dimensions";
 import { buildCatalogManifest } from "./catalog-manifest";
 import { conflictIdsFor, hardConflictIdsFor, OPTION_CONFLICTS } from "./audit-model";
@@ -197,6 +197,18 @@ describe("computeFillSet (A3)", () => {
     expect(fill).not.toContain("camera_angle");
   });
 
+  it("P1 props: omits character_props from fill when seed has no prop cue", () => {
+    const history: AgentHistoryItem[] = [
+      { questionId: "subject", selectedOptionIds: ["image_subject:game_character"] },
+      { questionId: "person_type", selectedOptionIds: ["image_person_type:game_character"] },
+      { questionId: "gender_presentation", selectedOptionIds: ["image_gender_presentation:masculine"] },
+      { questionId: "framing", selectedOptionIds: ["image_framing:medium_shot"] },
+      { questionId: "portrait_expression", selectedOptionIds: ["image_portrait_expression:confident"] },
+    ];
+    const fill = computeFillSet("人像", history, manifest, 10, undefined, "游戏角色立绘");
+    expect(fill).not.toContain("character_props");
+  });
+
   it("returns empty for types with no secondary remaining", () => {
     const fill = computeFillSet("通用", [], manifest);
     expect(fill.length).toBeLessThanOrEqual(4);
@@ -210,6 +222,58 @@ describe("computeFillSet (A3)", () => {
     }));
     const fill = computeFillSet("人像", history, manifest, 40);
     expect(fill).toEqual([]);
+  });
+});
+
+describe("heuristicFillGaps", () => {
+  it("missingPortraitCoreFill lists only core dims still in fillSet", () => {
+    expect(missingPortraitCoreFill(["lighting", "hair", "scene"], [])).toEqual([
+      "lighting",
+      "hair",
+    ]);
+    expect(missingPortraitCoreFill(["lighting", "hair", "pose"], ["lighting"])).toEqual([
+      "hair",
+      "pose",
+    ]);
+  });
+
+  it("fills hair with a valid catalog option when seed mentions 银发", () => {
+    const history: AgentHistoryItem[] = [
+      { questionId: "subject", selectedOptionIds: ["image_subject:beautiful_woman"] },
+      { questionId: "framing", selectedOptionIds: ["image_framing:medium_shot"] },
+    ];
+    const fillSet = ["hair", "lighting"];
+    const gaps = heuristicFillGaps(
+      fillSet,
+      ["hair"],
+      manifest,
+      history,
+      [],
+      "游戏角色立绘，银发剑士",
+    );
+    expect(gaps).toHaveLength(1);
+    expect(gaps[0].questionId).toBe("hair");
+    const hairDim = manifest.find((d) => d.questionId === "hair")!;
+    expect(hairDim.options.some((o) => o.id === gaps[0].selectedOptionIds[0])).toBe(true);
+  });
+
+  it("seed 回眸 prefers pose option when label matches", () => {
+    const history: AgentHistoryItem[] = [
+      { questionId: "subject", selectedOptionIds: ["image_subject:beautiful_woman"] },
+      { questionId: "framing", selectedOptionIds: ["image_framing:medium_shot"] },
+    ];
+    const gaps = heuristicFillGaps(
+      ["pose"],
+      ["pose"],
+      manifest,
+      history,
+      [],
+      "海边回眸的漂亮女生",
+    );
+    expect(gaps).toHaveLength(1);
+    const poseDim = manifest.find((d) => d.questionId === "pose")!;
+    const label = poseDim.options.find((o) => o.id === gaps[0].selectedOptionIds[0])?.label ?? "";
+    expect(label).toMatch(/回眸|回头|looking back/i);
   });
 });
 
@@ -457,7 +521,7 @@ describe("autoFillDimensions (A4)", () => {
     }
   });
 
-  it("returns empty on transport error (never blocks)", async () => {
+  it("returns empty on transport error when fillSet has no §7 core dims", async () => {
     const transport = async () => {
       throw new Error("network down");
     };
@@ -471,7 +535,34 @@ describe("autoFillDimensions (A4)", () => {
     expect(result).toEqual([]);
   });
 
-  it("returns empty for malformed LLM response", async () => {
+  it("heuristic backfills lighting/hair/pose when LLM transport fails (StepFun-class)", async () => {
+    const history: AgentHistoryItem[] = [
+      { questionId: "subject", selectedOptionIds: ["image_subject:beautiful_woman"] },
+      { questionId: "person_type", selectedOptionIds: ["image_person_type:realistic_portrait"] },
+      { questionId: "gender_presentation", selectedOptionIds: ["image_gender_presentation:feminine"] },
+      { questionId: "framing", selectedOptionIds: ["image_framing:medium_shot"] },
+      { questionId: "portrait_expression", selectedOptionIds: ["image_portrait_expression:gentle"] },
+    ];
+    const fillSet = computeFillSet("人像", history, manifest, 5, undefined, "海边回眸的漂亮女生，胶片感");
+
+    const result = await autoFillDimensions(provider, "test-key", {
+      manifest,
+      history,
+      fillSet,
+      userDescription: "海边回眸的漂亮女生，胶片感",
+    }, async () => {
+      throw new Error("network down");
+    });
+
+    expect(result.map((r) => r.questionId)).toEqual(
+      expect.arrayContaining(["lighting", "hair", "pose"]),
+    );
+    for (const r of result) {
+      expect(r.selectedOptionIds.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("returns empty for malformed LLM response on non-core fillSet", async () => {
     const transport = async () => ({
       choices: [{
         message: {

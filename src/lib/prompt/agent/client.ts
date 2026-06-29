@@ -12,6 +12,7 @@ import { activeDimensions } from "./active-dimensions";
 import type { Precision } from "./gradient";
 import { GRADIENT } from "./gradient";
 import { conflictIdsFor, suggestedIdsFor } from "./audit-model";
+import { heuristicFillGaps, missingPortraitCoreFill } from "./fill";
 
 const ANTHROPIC_VERSION = "2023-06-01";
 const PROXY_URL = "/api/llm";
@@ -595,6 +596,18 @@ export async function autoFillDimensions(
 
   if (fillSet.length === 0) return [];
 
+  const withCoreHeuristic = (llmResults: AutoFillResult[]): AutoFillResult[] => {
+    const gaps = heuristicFillGaps(
+      fillSet,
+      missingPortraitCoreFill(fillSet, llmResults.map((r) => r.questionId)),
+      manifest,
+      history,
+      llmResults,
+      userDescription,
+    );
+    return gaps.length > 0 ? [...llmResults, ...gaps] : llmResults;
+  };
+
   try {
     // ── Sequential accumulation filtering ──
     // Start from all user-selected option ids
@@ -647,7 +660,7 @@ export async function autoFillDimensions(
       }
     }
 
-    if (dimPayloads.length === 0) return [];
+    if (dimPayloads.length === 0) return withCoreHeuristic([]);
 
     // ── Build user message ──
     const userPicksDesc = history
@@ -685,7 +698,7 @@ export async function autoFillDimensions(
 
     const userText = `用户已选：\n${userPicksDesc || "（无）"}\n\n待补全维度：\n${dimsDesc}`;
 
-    // ── Single LLM call ──
+    // ── LLM call (one retry when tool output is empty — helps slow providers) ──
     const proxyReq = buildToolRequest(provider, apiKey, {
       model: provider.routingModel,
       maxTokens: provider.maxTokens ?? 512,
@@ -694,62 +707,61 @@ export async function autoFillDimensions(
       tool: FILL_TOOL,
     });
 
-    const resp = await transport(proxyReq);
+    let results: AutoFillResult[] = [];
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const resp = await transport(proxyReq);
+      const rawInput = extractToolInput(provider, resp, FILL_TOOL.name) as
+        | { picks?: unknown }
+        | undefined;
 
-    // ── Parse response ──
-    const rawInput = extractToolInput(provider, resp, FILL_TOOL.name) as
-      | { picks?: unknown }
-      | undefined;
+      if (!rawInput || !Array.isArray(rawInput.picks)) continue;
 
-    if (!rawInput || !Array.isArray(rawInput.picks)) return [];
+      // ── Post-response validation ──
+      const userAcc = new Set(userSelectedIds);
+      const seen = new Set<string>();
+      const attemptResults: AutoFillResult[] = [];
 
-    // ── Post-response validation ──
-    const userAcc = new Set(userSelectedIds);
-    const seen = new Set<string>(); // P2: dedup duplicate questionIds
-    const results: AutoFillResult[] = [];
+      for (const pick of rawInput.picks as Array<{ questionId?: unknown; optionIds?: unknown }>) {
+        if (typeof pick.questionId !== "string" || !Array.isArray(pick.optionIds)) continue;
+        if (seen.has(pick.questionId)) continue;
+        seen.add(pick.questionId);
 
-    for (const pick of rawInput.picks as Array<{ questionId?: unknown; optionIds?: unknown }>) {
-      if (typeof pick.questionId !== "string" || !Array.isArray(pick.optionIds)) continue;
-      if (seen.has(pick.questionId)) continue; // dedup
-      seen.add(pick.questionId);
+        const dim = manifestMap.get(pick.questionId);
+        if (!dim) continue;
 
-      const dim = manifestMap.get(pick.questionId);
-      if (!dim) continue;
+        const validOptionIds = new Set(dim.options.map((o) => o.id));
+        const blocked = conflictIdsFor(userAcc, { includeCaution: true });
 
-      const validOptionIds = new Set(dim.options.map((o) => o.id));
-      const blocked = conflictIdsFor(userAcc, { includeCaution: true });
+        const accepted: string[] = [];
+        for (const oid of pick.optionIds) {
+          if (typeof oid !== "string") continue;
+          if (!validOptionIds.has(oid)) continue;
+          if (blocked.has(oid)) continue;
+          accepted.push(oid);
+        }
 
-      // Re-validate each option id
-      const accepted: string[] = [];
-      for (const oid of pick.optionIds) {
-        if (typeof oid !== "string") continue;
-        if (!validOptionIds.has(oid)) continue;  // not a real option
-        if (blocked.has(oid)) continue;           // conflicts with accumulated picks
-        accepted.push(oid);
-      }
-
-      // Respect mode constraints: single→1, multi→max 2 (matches FILL_TOOL description)
-      if (dim.mode === "single") {
+        if (dim.mode === "single") {
+          if (accepted.length === 0) continue;
+          accepted.length = 1;
+        } else if (accepted.length > 2) {
+          accepted.length = 2;
+        }
         if (accepted.length === 0) continue;
-        accepted.length = 1;
-      } else {
-        // multi: cap at 2 per FILL_TOOL description "1-2 options per dimension"
-        if (accepted.length > 2) accepted.length = 2;
+
+        attemptResults.push({
+          questionId: pick.questionId,
+          selectedOptionIds: accepted,
+        });
+
+        for (const oid of accepted) userAcc.add(oid);
       }
-      if (accepted.length === 0) continue;
 
-      results.push({
-        questionId: pick.questionId,
-        selectedOptionIds: accepted,
-      });
-
-      // Fold accepted into accumulator for next dimension
-      for (const oid of accepted) userAcc.add(oid);
+      results = attemptResults;
+      if (results.length > 0) break;
     }
 
-    return results;
+    return withCoreHeuristic(results);
   } catch {
-    // Any failure → return empty (never block prompt generation)
-    return [];
+    return withCoreHeuristic([]);
   }
 }

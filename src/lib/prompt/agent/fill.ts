@@ -7,10 +7,91 @@
 import {
   GRADIENT,
 } from "./gradient";
-import { resolveActiveSet, applyCameraQuestionDemotion } from "./active-dimensions";
+import {
+  resolveActiveSet,
+  applyCameraQuestionDemotion,
+  applyPropsQuestionDemotion,
+} from "./active-dimensions";
 import type { AgentHistoryItem } from "./decision";
 import type { CatalogManifest } from "./catalog-manifest";
-import { applyPortraitFillPolicy, boostFillCandidates } from "./fill-boost";
+import { conflictIdsFor, suggestedIdsFor } from "./audit-model";
+import {
+  applyPortraitFillPolicy,
+  boostFillCandidates,
+  fillBoostSignals,
+  PORTRAIT_CORE_FILL,
+} from "./fill-boost";
+
+export type HeuristicFillResult = {
+  questionId: string;
+  selectedOptionIds: string[];
+};
+
+/**
+ * Deterministic autofill when the LLM returns nothing or skips §7 core dims.
+ * Picks non-conflicting catalog options; prefers associations, then seed label match.
+ */
+export function heuristicFillGaps(
+  fillSet: string[],
+  missingQuestionIds: readonly string[],
+  manifest: CatalogManifest,
+  history: AgentHistoryItem[],
+  existingResults: HeuristicFillResult[],
+  userDescription?: string,
+): HeuristicFillResult[] {
+  const manifestMap = new Map(manifest.map((d) => [d.questionId, d]));
+  const userAcc = new Set([
+    ...history.flatMap((h) => h.selectedOptionIds),
+    ...existingResults.flatMap((r) => r.selectedOptionIds),
+  ]);
+  const filled = new Set(existingResults.map((r) => r.questionId));
+  const results: HeuristicFillResult[] = [];
+  const descLower = (userDescription ?? "").toLowerCase();
+
+  for (const qid of missingQuestionIds) {
+    if (!fillSet.includes(qid)) continue;
+    if (filled.has(qid)) continue;
+
+    const dim = manifestMap.get(qid);
+    if (!dim || dim.mode === "free_text") continue;
+
+    const blocked = conflictIdsFor(userAcc, { includeCaution: true });
+    const suggested = suggestedIdsFor(userAcc);
+    const signals = fillBoostSignals(qid);
+    const candidates = dim.options.filter((o) => !blocked.has(o.id));
+    if (candidates.length === 0) continue;
+
+    const pick =
+      candidates.find((o) => suggested.has(o.id)) ??
+      candidates.find((o) =>
+        signals.some((s) => {
+          const sig = s.toLowerCase();
+          if (!descLower.includes(sig)) return false;
+          return (
+            o.label.toLowerCase().includes(sig) ||
+            o.id.toLowerCase().includes(sig.replace(/\s/g, "_"))
+          );
+        }),
+      ) ??
+      candidates[0];
+
+    const ids = [pick.id];
+    results.push({ questionId: qid, selectedOptionIds: ids });
+    filled.add(qid);
+    userAcc.add(pick.id);
+  }
+
+  return results;
+}
+
+/** §7 core dims the LLM skipped — eligible for heuristic backfill. */
+export function missingPortraitCoreFill(
+  fillSet: string[],
+  filledQuestionIds: Iterable<string>,
+): string[] {
+  const filled = new Set(filledQuestionIds);
+  return PORTRAIT_CORE_FILL.filter((id) => fillSet.includes(id) && !filled.has(id));
+}
 
 /**
  * Compute which secondary dimensions to auto-fill.
@@ -36,6 +117,7 @@ export function computeFillSet(
   // Active set at "standard" precision — includes essentials + secondary
   const active = resolveActiveSet(type, "standard", history, gradient, userDescription);
   applyCameraQuestionDemotion(active, history, userDescription);
+  applyPropsQuestionDemotion(active, userDescription);
 
   // Identify which dims are essential vs secondary at this type
   const essentialIds = new Set([

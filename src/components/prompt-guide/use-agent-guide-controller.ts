@@ -16,7 +16,7 @@ import { logAgent, getAgentLog } from "@/lib/prompt/agent/debug-log";
 import { routePrimaryType, suggestedIdsFromDescription, inferSubjectOptionIds } from "@/lib/prompt/agent/routing";
 import type { Precision } from "@/lib/prompt/agent/gradient";
 import { computeFillSet } from "@/lib/prompt/agent/fill";
-import { boostedQuestionIds } from "@/lib/prompt/agent/fill-boost";
+import { portraitFillCap } from "@/lib/prompt/agent/fill-boost";
 
 /** Flatten selection values (string | string[]) into a flat id list. */
 function selectedOptionIds(selections: PromptSelections): string[] {
@@ -52,6 +52,56 @@ function writeStorage(key: string, value: string): void {
 // naturally via remainingEmpty rather than getting cut; only fires as a guard
 // against a never-terminating bug.
 const H3_MAX_TURNS = 28;
+
+async function runSecondaryAutofill(args: {
+  history: AgentHistoryItem[];
+  manifest: ReturnType<typeof buildCatalogManifest>;
+  description: string;
+  precision: Precision;
+  providerId: string;
+  apiKey: string;
+}): Promise<{ filledHistory: AgentHistoryItem[]; filledIds: Set<string> }> {
+  let filledHistory = args.history;
+  const filledIds = new Set<string>();
+  if (args.precision === "detailed") return { filledHistory, filledIds };
+
+  const type = routePrimaryType(args.description);
+  const fillCap = portraitFillCap(type);
+  const fillSet = computeFillSet(
+    type,
+    args.history,
+    args.manifest,
+    fillCap,
+    undefined,
+    args.description,
+  );
+  if (fillSet.length === 0) return { filledHistory, filledIds };
+
+  logAgent("autofill", { fillSet, type, precision: args.precision });
+  try {
+    const fillResults = await autoFillDimensions(
+      getProvider(args.providerId),
+      args.apiKey,
+      {
+        manifest: args.manifest,
+        history: args.history,
+        fillSet,
+        userDescription: args.description,
+      },
+    );
+    for (const r of fillResults) {
+      filledHistory = appendAnswer(filledHistory, r.questionId, r.selectedOptionIds);
+      filledIds.add(r.questionId);
+    }
+    logAgent("autofill-done", {
+      filledDimensions: [...filledIds],
+      fillCount: fillResults.length,
+    });
+  } catch {
+    logAgent("autofill-error", { fillSet });
+  }
+  return { filledHistory, filledIds };
+}
 
 /** Controller for the BYOK, multi-provider agent prototype. The agent picks the
  *  next dimension + narrowed options each turn (via /api/llm proxy); the final
@@ -266,45 +316,15 @@ export function useAgentGuideController() {
         }
 
         if (next.done) {
-          // A5: auto-fill secondary dimensions before transitioning to done
-          let filledHistory = nextHistory;
-          const filledIds = new Set<string>();
-
-          // Skip auto-fill for detailed precision (all dims already covered)
-          // or when fillSet is empty
-          if (precisionRef.current !== "detailed") {
-            const type = routePrimaryType(descriptionRef.current);
-            const fillCap = boostedQuestionIds(descriptionRef.current).size > 0 ? 5 : 4;
-            const fillSet = computeFillSet(type, nextHistory, manifest, fillCap, undefined, descriptionRef.current);
-
-            if (fillSet.length > 0) {
-              logAgent("autofill", { fillSet, type, precision: precisionRef.current });
-
-              try {
-                const fillResults = await autoFillDimensions(
-                  getProvider(providerRef.current),
-                  keyRef.current,
-                  { manifest, history: nextHistory, fillSet, userDescription: descriptionRef.current },
-                );
-
-                // Session guard: discard if superseded during await
-                if (sessionRef.current !== mySession) return;
-
-                for (const r of fillResults) {
-                  filledHistory = appendAnswer(filledHistory, r.questionId, r.selectedOptionIds);
-                  filledIds.add(r.questionId);
-                }
-
-                logAgent("autofill-done", {
-                  filledDimensions: [...filledIds],
-                  fillCount: fillResults.length,
-                });
-              } catch {
-                // Auto-fill failure is non-fatal
-                logAgent("autofill-error", { fillSet });
-              }
-            }
-          }
+          const { filledHistory, filledIds } = await runSecondaryAutofill({
+            history: nextHistory,
+            manifest,
+            description: descriptionRef.current,
+            precision: precisionRef.current,
+            providerId: providerRef.current,
+            apiKey: keyRef.current,
+          });
+          if (sessionRef.current !== mySession) return;
 
           // H2: empty prompt guard (now on filledHistory)
           const { selections: sel, freeTexts: ft } = buildRenderInputs(
@@ -515,30 +535,18 @@ export function useAgentGuideController() {
   const finishNow = useCallback(async () => {
     // Nothing to stitch if the user hasn't answered anything yet.
     if (history.length === 0) return;
+    const mySession = ++sessionRef.current;
     logAgent("finish", { askedSoFar: history.map((h) => h.questionId) });
 
-    // Auto-fill secondary dimensions (same logic as fetchNext done branch)
-    let filledHistory = history;
-    const filledIds = new Set<string>();
-
-    if (precisionRef.current !== "detailed") {
-      const type = routePrimaryType(descriptionRef.current);
-      const fillCap = boostedQuestionIds(descriptionRef.current).size > 0 ? 5 : 4;
-      const fillSet = computeFillSet(type, history, manifest, fillCap, undefined, descriptionRef.current);
-      if (fillSet.length > 0) {
-        try {
-          const fillResults = await autoFillDimensions(
-            getProvider(providerRef.current),
-            keyRef.current,
-            { manifest, history, fillSet, userDescription: descriptionRef.current },
-          );
-          for (const r of fillResults) {
-            filledHistory = appendAnswer(filledHistory, r.questionId, r.selectedOptionIds);
-            filledIds.add(r.questionId);
-          }
-        } catch { /* non-fatal */ }
-      }
-    }
+    const { filledHistory, filledIds } = await runSecondaryAutofill({
+      history,
+      manifest,
+      description: descriptionRef.current,
+      precision: precisionRef.current,
+      providerId: providerRef.current,
+      apiKey: keyRef.current,
+    });
+    if (sessionRef.current !== mySession) return;
 
     setAutoFilledQuestionIds(filledIds);
     setHistory(filledHistory);

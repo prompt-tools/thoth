@@ -65,7 +65,7 @@ const { renderPrompt } = await loadTs("src/lib/prompt/adapters.ts");
 const { routePrimaryType, inferSubjectOptionIds } = await loadTs("src/lib/prompt/agent/routing.ts");
 const { imagePromptAgentWorkType } = await loadTs("src/lib/prompt/work-types/image-prompt-agent.worktype.ts");
 const { computeFillSet } = await loadTs("src/lib/prompt/agent/fill.ts");
-const { boostedQuestionIds } = await loadTs("src/lib/prompt/agent/fill-boost.ts");
+const { portraitFillCap } = await loadTs("src/lib/prompt/agent/fill-boost.ts");
 
 // ── validate provider ────────────────────────────────────────────────────
 if (!PROVIDER_PRESETS.some((p) => p.id === PROVIDER_ID)) {
@@ -386,7 +386,7 @@ async function runOne(runId, seedValue, description) {
   // P1-E2 fix: skip auto-fill on fallbackGiveUp (matches controller behavior)
   if (PRECISION !== "detailed" && terminationReason !== "error" && terminationReason !== "fallbackGiveUp") {
     const type = routePrimaryType(description);
-    const fillCap = boostedQuestionIds(description).size > 0 ? 5 : 4;
+    const fillCap = portraitFillCap(type);
     const fillSet = computeFillSet(type, history, manifest, fillCap, undefined, description);
 
     if (fillSet.length > 0) {
