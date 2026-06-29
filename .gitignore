@@ -11,7 +11,8 @@ tsconfig.tsbuildinfo
 .memory/
 .vercel
 .codegraph/
-.cursor/
+.cursor/*
+!.cursor/BUGBOT.md
 .claude/
 # Local corpus + generated extracts (clone + JSONL — do not commit)
 .research/awesome-gpt-image-2/
