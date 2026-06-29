@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   applyPortraitFillPolicy,
   boostedQuestionIds,
+  portraitFillCap,
 } from "./fill-boost";
 
 describe("applyPortraitFillPolicy", () => {
@@ -58,5 +59,12 @@ describe("boostFillCandidates", () => {
     expect(boosted.has("hair")).toBe(true);
     const ordered = applyPortraitFillPolicy(["scene", "hair", "lighting"], "银发");
     expect(ordered[0]).toBe("hair");
+  });
+});
+
+describe("portraitFillCap", () => {
+  it("uses 5 for 人像 and 4 otherwise", () => {
+    expect(portraitFillCap("人像")).toBe(5);
+    expect(portraitFillCap("通用")).toBe(4);
   });
 });

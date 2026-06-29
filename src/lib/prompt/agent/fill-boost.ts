@@ -14,11 +14,14 @@ const FILL_BOOST_RULES: { questionId: string; signals: string[] }[] = [
   },
   {
     questionId: "character_render_style",
-    signals: ["立绘", "乙游", "卡面", "gacha", "splash", "live2d", "vtuber", "手游", "视觉小说"],
+    signals: [
+      "立绘", "乙游", "卡面", "gacha", "splash", "live2d", "vtuber", "手游", "视觉小说",
+      "机甲", "精灵", "奇幻", "mecha", "elf", "fantasy", "3d", "写实",
+    ],
   },
   {
     questionId: "art_style",
-    signals: ["胶片", "韩漫", "赛博", "二次元", "anime", "水彩", "写实", "3d", "漫画", "manga", "cyberpunk"],
+    signals: ["胶片", "韩漫", "赛博", "二次元", "anime", "水彩", "写实", "3d", "漫画", "manga", "cyberpunk", "黑白", "时尚"],
   },
   {
     questionId: "lighting",
@@ -36,9 +39,24 @@ const FILL_BOOST_RULES: { questionId: string; signals: string[] }[] = [
     questionId: "character_props",
     signals: PROP_SEED_SIGNALS,
   },
+  {
+    questionId: "scene",
+    signals: [
+      "海边", "职场", "漫展", "校园", "城堡", "影棚", "场照", "室内", "街道",
+      "studio", "street", "beach", "office", "convention",
+    ],
+  },
 ];
 
-const PORTRAIT_CORE_FILL = ["lighting", "hair", "pose"] as const;
+/** Corpus B-tier blocks — autofill must cover these even when LLM fails (§7). */
+export const PORTRAIT_CORE_FILL = ["lighting", "hair", "pose"] as const;
+
+/** Portrait simple/standard always fills 5 secondary dims (P0-1). */
+export const PORTRAIT_FILL_CAP = 5;
+
+export function portraitFillCap(type: string): number {
+  return type === "人像" ? PORTRAIT_FILL_CAP : 4;
+}
 
 const AGE_BAND_SIGNALS = [
   "青年", "少年", "成熟", "老年", "儿童", "teen", "adult", "mature", "elderly", "young", "middle-aged",
@@ -69,6 +87,10 @@ export function hasCameraSeed(description: string | undefined): boolean {
 export function hasPropSeed(description: string | undefined): boolean {
   if (!description?.trim()) return false;
   return hasSignal(description, PROP_SEED_SIGNALS);
+}
+
+export function fillBoostSignals(questionId: string): readonly string[] {
+  return FILL_BOOST_RULES.find((r) => r.questionId === questionId)?.signals ?? [];
 }
 
 export function boostedQuestionIds(description: string | undefined): Set<string> {

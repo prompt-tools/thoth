@@ -16,7 +16,7 @@ import { logAgent, getAgentLog } from "@/lib/prompt/agent/debug-log";
 import { routePrimaryType, suggestedIdsFromDescription, inferSubjectOptionIds } from "@/lib/prompt/agent/routing";
 import type { Precision } from "@/lib/prompt/agent/gradient";
 import { computeFillSet } from "@/lib/prompt/agent/fill";
-import { boostedQuestionIds } from "@/lib/prompt/agent/fill-boost";
+import { portraitFillCap } from "@/lib/prompt/agent/fill-boost";
 
 /** Flatten selection values (string | string[]) into a flat id list. */
 function selectedOptionIds(selections: PromptSelections): string[] {
@@ -274,7 +274,7 @@ export function useAgentGuideController() {
           // or when fillSet is empty
           if (precisionRef.current !== "detailed") {
             const type = routePrimaryType(descriptionRef.current);
-            const fillCap = boostedQuestionIds(descriptionRef.current).size > 0 ? 5 : 4;
+            const fillCap = portraitFillCap(type);
             const fillSet = computeFillSet(type, nextHistory, manifest, fillCap, undefined, descriptionRef.current);
 
             if (fillSet.length > 0) {
@@ -523,7 +523,7 @@ export function useAgentGuideController() {
 
     if (precisionRef.current !== "detailed") {
       const type = routePrimaryType(descriptionRef.current);
-      const fillCap = boostedQuestionIds(descriptionRef.current).size > 0 ? 5 : 4;
+      const fillCap = portraitFillCap(type);
       const fillSet = computeFillSet(type, history, manifest, fillCap, undefined, descriptionRef.current);
       if (fillSet.length > 0) {
         try {
