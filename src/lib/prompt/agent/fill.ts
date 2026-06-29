@@ -7,7 +7,11 @@
 import {
   GRADIENT,
 } from "./gradient";
-import { resolveActiveSet, applyCameraQuestionDemotion } from "./active-dimensions";
+import {
+  resolveActiveSet,
+  applyCameraQuestionDemotion,
+  applyPropsQuestionDemotion,
+} from "./active-dimensions";
 import type { AgentHistoryItem } from "./decision";
 import type { CatalogManifest } from "./catalog-manifest";
 import { conflictIdsFor, suggestedIdsFor } from "./audit-model";
@@ -113,6 +117,7 @@ export function computeFillSet(
   // Active set at "standard" precision — includes essentials + secondary
   const active = resolveActiveSet(type, "standard", history, gradient, userDescription);
   applyCameraQuestionDemotion(active, history, userDescription);
+  applyPropsQuestionDemotion(active, userDescription);
 
   // Identify which dims are essential vs secondary at this type
   const essentialIds = new Set([

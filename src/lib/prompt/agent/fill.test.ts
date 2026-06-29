@@ -197,6 +197,18 @@ describe("computeFillSet (A3)", () => {
     expect(fill).not.toContain("camera_angle");
   });
 
+  it("P1 props: omits character_props from fill when seed has no prop cue", () => {
+    const history: AgentHistoryItem[] = [
+      { questionId: "subject", selectedOptionIds: ["image_subject:game_character"] },
+      { questionId: "person_type", selectedOptionIds: ["image_person_type:game_character"] },
+      { questionId: "gender_presentation", selectedOptionIds: ["image_gender_presentation:masculine"] },
+      { questionId: "framing", selectedOptionIds: ["image_framing:medium_shot"] },
+      { questionId: "portrait_expression", selectedOptionIds: ["image_portrait_expression:confident"] },
+    ];
+    const fill = computeFillSet("人像", history, manifest, 10, undefined, "游戏角色立绘");
+    expect(fill).not.toContain("character_props");
+  });
+
   it("returns empty for types with no secondary remaining", () => {
     const fill = computeFillSet("通用", [], manifest);
     expect(fill.length).toBeLessThanOrEqual(4);
