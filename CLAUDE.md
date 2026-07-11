@@ -77,3 +77,17 @@ codegraph init -i    # optional: local code intelligence index
 Video + dual work-type switching, plus the eval/test harness, stay in
 **prompt-tools/controllable-prompt-guide** (and its eval fork). thoth carries
 production code only.
+
+## Agent skills
+
+### Issue tracker
+
+Issues and PRDs live in GitHub Issues for `prompt-tools/thoth`. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Use the default Matt Pocock triage labels. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+This is a single-context repo. See `docs/agents/domain.md`.
