@@ -58,8 +58,16 @@ Server-only env vars (never `NEXT_PUBLIC_`, never in the browser bundle):
 | Var | Purpose |
 |-----|---------|
 | `DEMO_DEEPSEEK_KEY` | Built-in model key injected by `/api/llm` (api.deepseek.com only) |
+| `ADAPTIVE_TURN_SECRET` | HMAC secret binding every Adaptive answer to the previously accepted Ask |
+| `ADAPTIVE_ROUTING_ENABLED=1` | Enable the server Adaptive turn boundary; absent keeps the fixed route |
 | `LANGFUSE_BASE_URL` / `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` | Telemetry sink; absent → telemetry is a no-op |
-| `NEXT_PUBLIC_AGENT_DEMO_BUILTIN=1` | Skip the BYOK key gate, use the built-in key (public flag) |
+
+Public build-time flags:
+
+| Var | Purpose |
+|-----|---------|
+| `NEXT_PUBLIC_AGENT_DEMO_BUILTIN=1` | Skip the BYOK key gate and use the built-in key |
+| `NEXT_PUBLIC_ADAPTIVE_ROUTING=1` | Send browser turns through the Adaptive boundary |
 
 ## Commands / 命令
 

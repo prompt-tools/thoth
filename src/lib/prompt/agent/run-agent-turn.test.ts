@@ -254,4 +254,27 @@ describe("requestAdaptiveTurn", () => {
       precision: "simple",
     });
   });
+
+  it("carries the server-issued turn token on a later answer", async () => {
+    const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      decision: {
+        nextQuestionId: null,
+        questionText: null,
+        helperText: null,
+        visibleOptionIds: [],
+        done: true,
+      },
+      diagnostics: { source: "model" },
+    })));
+
+    await requestAdaptiveTurn("secret", {
+      subjectBrief: "雨夜女侦探",
+      history: [{ questionId: "scene", selectedOptionIds: ["image_scene:urban_street"] }],
+      precision: "simple",
+      turnToken: "signed-ask",
+    }, fetcher);
+
+    const [, init] = fetcher.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(init.body as string)).toMatchObject({ turnToken: "signed-ask" });
+  });
 });

@@ -175,6 +175,24 @@ describe("generic-image renderer snapshot", () => {
     });
     expect(rendered.zhPrompt.startsWith("实验室科学家，人物头像")).toBe(true);
   });
+
+  it("preserves Subject, confirmed Free text, catalog selections, Background direction, and constraints", () => {
+    const rendered = renderPrompt({
+      workType: imagePromptAgentWorkType,
+      rawIntent: "疲惫的私家侦探，黑色小说封面",
+      selections: {
+        subject: ["image_subject:novel_character"],
+        lighting: ["image_lighting:neon_light"],
+      },
+      freeTexts: { scene: "雨夜霓虹巷，湿润地面反光" },
+    });
+
+    expect(rendered.zhPrompt.startsWith("疲惫的私家侦探，黑色小说封面")).toBe(true);
+    expect(rendered.zhPrompt).toContain("雨夜霓虹巷，湿润地面反光");
+    expect(rendered.zhPrompt).toContain("霓虹");
+    expect(rendered.zhPrompt).toContain("避免多手指");
+    expect(rendered.zhPrompt).toContain("避免未成年或青少年角色的性感化");
+  });
 });
 
 describe("portrait E2E renderer samples", () => {

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildCatalogManifest } from "@/lib/prompt/agent/catalog-manifest";
+import { issueAcceptedAskToken } from "@/lib/prompt/agent/adaptive-turn-state";
 import { POST } from "./route";
 
 afterEach(() => {
@@ -12,6 +13,7 @@ describe("POST /api/adaptive-turn", () => {
   it("accepts a model-selected Eligible dimension instead of ordered[0]", async () => {
     vi.stubEnv("ADAPTIVE_ROUTING_ENABLED", "1");
     vi.stubEnv("DEMO_DEEPSEEK_KEY", "server-key");
+    vi.stubEnv("ADAPTIVE_TURN_SECRET", "turn-secret");
     const sceneIds = buildCatalogManifest()
       .find((dimension) => dimension.questionId === "scene")!
       .options.slice(0, 3)
@@ -74,6 +76,7 @@ describe("POST /api/adaptive-turn", () => {
   it("rejects the entire model Ask when one option is outside its dimension", async () => {
     vi.stubEnv("ADAPTIVE_ROUTING_ENABLED", "1");
     vi.stubEnv("DEMO_DEEPSEEK_KEY", "server-key");
+    vi.stubEnv("ADAPTIVE_TURN_SECRET", "turn-secret");
     const manifest = buildCatalogManifest();
     const sceneIds = manifest.find((dimension) => dimension.questionId === "scene")!
       .options.slice(0, 3)
@@ -117,6 +120,7 @@ describe("POST /api/adaptive-turn", () => {
   it("rejects a history that has exhausted the 10-turn sparse budget before calling DeepSeek", async () => {
     vi.stubEnv("ADAPTIVE_ROUTING_ENABLED", "1");
     vi.stubEnv("DEMO_DEEPSEEK_KEY", "server-key");
+    vi.stubEnv("ADAPTIVE_TURN_SECRET", "turn-secret");
     const fetchSpy = vi.fn();
     vi.stubGlobal("fetch", fetchSpy);
     const history = buildCatalogManifest()
@@ -126,14 +130,22 @@ describe("POST /api/adaptive-turn", () => {
         questionId: dimension.questionId,
         selectedOptionIds: [dimension.options[0].id],
       }));
+    const last = history.at(-1)!;
+    const turnToken = issueAcceptedAskToken({
+      secret: "turn-secret",
+      subjectBrief: "原创游侠角色",
+      history: history.slice(0, -1),
+      questionId: last.questionId,
+      optionIds: last.selectedOptionIds,
+    });
 
     const response = await POST(new Request("http://localhost/api/adaptive-turn", {
       method: "POST",
       headers: { authorization: "Bearer __demo__", "content-type": "application/json" },
-      body: JSON.stringify({ subjectBrief: "雨夜女侦探小说封面", history, precision: "simple" }),
+      body: JSON.stringify({ subjectBrief: "原创游侠角色", history, precision: "simple", turnToken }),
     }));
 
-    expect(response.status).toBe(400);
+    expect(response.status).toBe(409);
     expect(await response.json()).toEqual({ error: "history_budget_exhausted" });
     expect(fetchSpy).not.toHaveBeenCalled();
   });
@@ -142,6 +154,7 @@ describe("POST /api/adaptive-turn", () => {
     vi.useFakeTimers();
     vi.stubEnv("ADAPTIVE_ROUTING_ENABLED", "1");
     vi.stubEnv("DEMO_DEEPSEEK_KEY", "server-key");
+    vi.stubEnv("ADAPTIVE_TURN_SECRET", "turn-secret");
     const fetchSpy = vi.fn();
     vi.stubGlobal("fetch", fetchSpy);
     const request = {
@@ -157,5 +170,104 @@ describe("POST /api/adaptive-turn", () => {
 
     expect(response?.status).toBe(408);
     expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("returns a legal zero-turn remainingEmpty Completion without calling DeepSeek", async () => {
+    vi.stubEnv("ADAPTIVE_ROUTING_ENABLED", "1");
+    vi.stubEnv("DEMO_DEEPSEEK_KEY", "server-key");
+    vi.stubEnv("ADAPTIVE_TURN_SECRET", "turn-secret");
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const response = await POST(new Request("http://localhost/api/adaptive-turn", {
+      method: "POST",
+      headers: { authorization: "Bearer __demo__", "content-type": "application/json" },
+      body: JSON.stringify({
+        subjectBrief: "32岁、古铜色自然皮肤、高挑强健、红色长卷发、左眼眼罩和下颌疤痕、无妆感的女船长，穿黑色皮革长外套与金属肩甲，握弯刀怒视镜头，双腿站稳在暴风雨甲板上，低机位 35mm 全身竖版 2:3 海报构图，蓝绿色冷色调电影光效与雨雾，史诗紧张氛围，电影级高细节写实 3D 手游主视觉",
+        history: [],
+        precision: "simple",
+      }),
+    }));
+
+    expect(await response.json()).toMatchObject({
+      decision: {
+        done: true,
+        nextQuestionId: null,
+        questionText: null,
+        helperText: null,
+        visibleOptionIds: [],
+      },
+      diagnostics: { source: "remainingEmpty" },
+    });
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("rejects a later answer that was not selected from the previously accepted Ask", async () => {
+    vi.stubEnv("ADAPTIVE_ROUTING_ENABLED", "1");
+    vi.stubEnv("DEMO_DEEPSEEK_KEY", "server-key");
+    vi.stubEnv("ADAPTIVE_TURN_SECRET", "turn-secret");
+    const scene = buildCatalogManifest().find((dimension) => dimension.questionId === "scene")!;
+    const shownIds = scene.options.slice(0, 3).map((option) => option.id);
+    const hiddenButCatalogValidId = scene.options[4].id;
+    const fetchSpy = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      choices: [{
+        finish_reason: "tool_calls",
+        message: {
+          tool_calls: [{
+            function: {
+              name: "decide_adaptive_turn",
+              arguments: JSON.stringify({
+                done: false,
+                nextQuestionId: "scene",
+                questionText: "这位游侠身处怎样的世界？",
+                helperText: "背景会决定角色的故事语境。",
+                optionIds: shownIds,
+              }),
+            },
+          }],
+        },
+      }],
+    })));
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const firstResponse = await POST(new Request("http://localhost/api/adaptive-turn", {
+      method: "POST",
+      headers: { authorization: "Bearer __demo__", "content-type": "application/json" },
+      body: JSON.stringify({ subjectBrief: "原创游侠角色", history: [], precision: "simple" }),
+    }));
+    const first = await firstResponse.json();
+    expect(first.turnToken).toEqual(expect.any(String));
+
+    const tamperedResponse = await POST(new Request("http://localhost/api/adaptive-turn", {
+      method: "POST",
+      headers: { authorization: "Bearer __demo__", "content-type": "application/json" },
+      body: JSON.stringify({
+        subjectBrief: "原创游侠角色",
+        history: [{ questionId: "scene", selectedOptionIds: [hiddenButCatalogValidId] }],
+        precision: "simple",
+        turnToken: first.turnToken,
+      }),
+    }));
+
+    expect(tamperedResponse.status).toBe(400);
+    expect(await tamperedResponse.json()).toEqual({ error: "invalid_turn_state" });
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+
+    const validResponse = await POST(new Request("http://localhost/api/adaptive-turn", {
+      method: "POST",
+      headers: { authorization: "Bearer __demo__", "content-type": "application/json" },
+      body: JSON.stringify({
+        subjectBrief: "原创游侠角色",
+        history: [{ questionId: "scene", selectedOptionIds: [shownIds[0]] }],
+        precision: "simple",
+        turnToken: first.turnToken,
+      }),
+    }));
+    const valid = await validResponse.json();
+
+    expect(validResponse.status).toBe(200);
+    expect(valid.decision.done).toBe(false);
+    expect(valid.turnToken).toEqual(expect.any(String));
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
   });
 });

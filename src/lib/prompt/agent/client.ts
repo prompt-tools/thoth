@@ -513,7 +513,7 @@ export async function requestNextStep(
  * sends state and a credential only; the server owns catalog and model input. */
 export async function requestAdaptiveTurn(
   apiKey: string,
-  args: { subjectBrief: string; history: AgentHistoryItem[]; precision: Precision },
+  args: { subjectBrief: string; history: AgentHistoryItem[]; precision: Precision; turnToken?: string },
   fetcher: typeof fetch = fetch,
 ): Promise<AdaptiveTurnResult> {
   const response = await fetcher("/api/adaptive-turn", {

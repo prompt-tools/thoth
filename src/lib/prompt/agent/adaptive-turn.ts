@@ -1,4 +1,11 @@
 import { activeDimensions } from "./active-dimensions";
+import {
+  analyzeAdaptiveBrief,
+  materialHistoryValue,
+  PILLAR_BY_QUESTION_ID,
+  type AdaptiveKnownFact,
+  type DifferentiationPillar,
+} from "./adaptive-brief";
 import { hardConflictIdsFor } from "./audit-model";
 import { buildCatalogManifest, type CatalogDimension } from "./catalog-manifest";
 import type { AgentDecision, AgentHistoryItem } from "./decision";
@@ -8,14 +15,14 @@ export const ADAPTIVE_MODEL = "deepseek-v4-flash";
 export const ADAPTIVE_ENDPOINT = "https://api.deepseek.com/chat/completions";
 export const ADAPTIVE_MAX_BYTES = 65_536;
 
-type Pillar = "characterSignature" | "narrativeBehavior" | "visualWorld" | "presentationPurpose";
+type BudgetClass = "sparse" | "partial" | "detailed";
 
 export interface AdaptiveEligibleDimension {
   questionId: string;
   title: string;
   helper: string;
   mode: CatalogDimension["mode"];
-  pillar: Pillar;
+  pillar: DifferentiationPillar;
   candidates: CatalogDimension["options"];
 }
 
@@ -23,64 +30,40 @@ export interface AdaptiveTurnSnapshot {
   contractVersion: "adaptive-question-turn-v1";
   subjectBrief: string;
   history: AgentHistoryItem[];
-  knownFacts: Array<{
-    dimension: string;
-    value: string;
-    source: "brief" | "history";
-    specificity: "exact" | "broad";
-    pillar: Pillar;
-    materiallyDifferentiating: boolean;
-  }>;
-  budget: { class: "sparse"; limit: 10; used: number; remaining: number };
+  knownFacts: AdaptiveKnownFact[];
+  coveredPillars: DifferentiationPillar[];
+  completionEligible: boolean;
+  budget: { class: BudgetClass; limit: 10 | 7 | 4; used: number; remaining: number };
   eligibleDimensions: AdaptiveEligibleDimension[];
 }
 
 export interface AdaptiveTurnResult {
   decision: AgentDecision;
-  diagnostics: { source: "model" | "fallback"; reason?: string };
+  diagnostics: { source: "model" | "fallback" | "remainingEmpty"; reason?: string };
+  turnToken?: string;
 }
 
 const SYSTEM_PROMPT = `你是人像/角色图片向导的出题智能体。只调用 decide_adaptive_turn 一次。
 从服务器提供的 eligibleDimensions 中选择当前最能增加差异化信息的一题。不要询问已知事实，不要发明问题或选项。
-Ask 必须返回 done=false、一个 eligible questionId、自然的中文 questionText/helperText，以及该维度 3-6 个唯一 optionIds。`;
+Ask 返回 done=false、一个 eligible questionId、自然的中文 questionText/helperText，以及该维度 3-6 个唯一 optionIds。
+只有四个 coveredPillars 都具备实质信息且没有阻断依赖时，才可返回严格的 nullable Completion 形状。预算耗尽不是 Completion 理由。`;
 
-const PILLAR_BY_QUESTION_ID: Record<string, Pillar> = {
-  subject: "characterSignature",
-  person_type: "characterSignature",
-  gender_presentation: "characterSignature",
-  age_band: "characterSignature",
-  face_features: "characterSignature",
-  hair: "characterSignature",
-  makeup: "characterSignature",
-  outfit: "characterSignature",
-  body_type: "characterSignature",
-  skin_tone: "characterSignature",
-  character_archetype: "characterSignature",
-  pose: "narrativeBehavior",
-  portrait_expression: "narrativeBehavior",
-  character_interaction: "narrativeBehavior",
-  character_props: "narrativeBehavior",
-  scene: "visualWorld",
-  lighting: "visualWorld",
-  character_render_style: "visualWorld",
-  color_palette: "visualWorld",
-  art_style: "visualWorld",
-  mood: "visualWorld",
-  use_case: "presentationPurpose",
-  framing: "presentationPurpose",
-  aspect_ratio: "presentationPurpose",
-  camera: "presentationPurpose",
-  camera_angle: "presentationPurpose",
-  composition: "presentationPurpose",
-  detail_level: "presentationPurpose",
-  post_processing: "presentationPurpose",
-  constraints: "presentationPurpose",
-};
-
-function pillarFor(questionId: string): Pillar {
+function pillarFor(questionId: string): DifferentiationPillar {
   const pillar = PILLAR_BY_QUESTION_ID[questionId];
   if (!pillar) throw new Error("unmapped_adaptive_dimension");
   return pillar;
+}
+
+function deriveBudget(knownFacts: AdaptiveKnownFact[], used: number): AdaptiveTurnSnapshot["budget"] {
+  const briefPillars = new Set(
+    knownFacts
+      .filter((fact) => fact.source === "brief" && fact.materiallyDifferentiating)
+      .map((fact) => fact.pillar),
+  );
+  const count = briefPillars.size;
+  const budgetClass: BudgetClass = count <= 1 ? "sparse" : count <= 3 ? "partial" : "detailed";
+  const limit = budgetClass === "sparse" ? 10 : budgetClass === "partial" ? 7 : 4;
+  return { class: budgetClass, limit, used, remaining: limit - used };
 }
 
 function isHistoryItem(value: unknown): value is AgentHistoryItem {
@@ -103,23 +86,55 @@ export function buildAdaptiveTurnSnapshot(input: unknown): AdaptiveTurnSnapshot 
   }
   if (!Array.isArray(raw.history) || !raw.history.every(isHistoryItem)) throw new Error("invalid_history");
   const history = raw.history;
-  if (history.length > 10) throw new Error("history_budget_exceeded");
-  if (history.length === 10) throw new Error("history_budget_exhausted");
   const manifest = buildCatalogManifest();
   const manifestMap = new Map(manifest.map((dimension) => [dimension.questionId, dimension]));
+  const seenHistory = new Set<string>();
   for (const item of history) {
     const dimension = manifestMap.get(item.questionId);
     if (!dimension || item.questionId === "subject") throw new Error("invalid_history_dimension");
+    if (seenHistory.has(item.questionId)) throw new Error("duplicate_history_dimension");
+    seenHistory.add(item.questionId);
     const allowed = new Set(dimension.options.map((option) => option.id));
     if (item.selectedOptionIds.some((id) => !allowed.has(id))) throw new Error("invalid_history_option");
   }
+
+  const knownFacts = analyzeAdaptiveBrief(subjectBrief);
+  for (const item of history) {
+    const dimension = manifestMap.get(item.questionId)!;
+    const value = item.freeText?.trim() || item.selectedOptionIds
+      .map((id) => dimension.options.find((option) => option.id === id)?.label ?? id)
+      .join("、");
+    knownFacts.push({
+      dimension: item.questionId,
+      value,
+      source: "history",
+      specificity: "exact",
+      pillar: pillarFor(item.questionId),
+      materiallyDifferentiating: materialHistoryValue(item.questionId, item.selectedOptionIds, item.freeText),
+      knownOptionIds: item.selectedOptionIds,
+    });
+  }
+  const budget = deriveBudget(knownFacts, history.length);
+  if (history.length > budget.limit) throw new Error("history_budget_exceeded");
 
   const selectedIds = history.flatMap((item) => item.selectedOptionIds);
   const blockedIds = hardConflictIdsFor(selectedIds);
   // Adaptive routing chooses from every semantically applicable portrait dimension;
   // Journey budgets, not the legacy UI precision tiers, limit how many are asked.
   const { ordered } = activeDimensions("人像", "detailed", history, GRADIENT, subjectBrief);
-  const eligibleDimensions = ordered
+  const exactDimensions = new Set(
+    knownFacts.filter((fact) => fact.specificity === "exact").map((fact) => fact.dimension),
+  );
+  const deliverySuppressions = new Set<string>();
+  if (exactDimensions.has("output_format") && /透明\s*PNG/i.test(subjectBrief)) deliverySuppressions.add("scene");
+  const broadDimensions = knownFacts
+    .filter((fact) => fact.source === "brief" && fact.specificity === "broad" && fact.dimension !== "subject")
+    .map((fact) => fact.dimension);
+  const shouldAskUseCase = !exactDimensions.has("use_case")
+    && /职业|品牌|公司|团队|头像|封面|宣传|海报/.test(subjectBrief);
+  const questionOrder = [...new Set([...(shouldAskUseCase ? ["use_case"] : []), ...broadDimensions, ...ordered])]
+    .filter((questionId) => !exactDimensions.has(questionId) && !deliverySuppressions.has(questionId));
+  const eligibleDimensions = questionOrder
     .filter((questionId) => questionId !== "subject")
     .map((questionId) => manifestMap.get(questionId))
     .filter((dimension): dimension is CatalogDimension => Boolean(dimension))
@@ -132,37 +147,23 @@ export function buildAdaptiveTurnSnapshot(input: unknown): AdaptiveTurnSnapshot 
       candidates: dimension.options.filter((option) => !blockedIds.has(option.id)),
     }))
     .filter((dimension) => dimension.candidates.length >= 3);
-  if (eligibleDimensions.length === 0) throw new Error("no_eligible_dimension");
-
-  const knownFacts: AdaptiveTurnSnapshot["knownFacts"] = [{
-    dimension: "subject",
-    value: subjectBrief,
-    source: "brief",
-    specificity: "broad",
-    pillar: "characterSignature",
-    materiallyDifferentiating: true,
-  }];
-  for (const item of history) {
-    const dimension = manifestMap.get(item.questionId)!;
-    const value = item.freeText?.trim() || item.selectedOptionIds
-      .map((id) => dimension.options.find((option) => option.id === id)?.label ?? id)
-      .join("、");
-    knownFacts.push({
-      dimension: item.questionId,
-      value,
-      source: "history",
-      specificity: "exact",
-      pillar: pillarFor(item.questionId),
-      materiallyDifferentiating: true,
-    });
-  }
+  const pillarOrder: DifferentiationPillar[] = [
+    "characterSignature", "narrativeBehavior", "visualWorld", "presentationPurpose",
+  ];
+  const coverage = new Set(
+    knownFacts.filter((fact) => fact.materiallyDifferentiating).map((fact) => fact.pillar),
+  );
+  const coveredPillars = pillarOrder.filter((pillar) => coverage.has(pillar));
+  const hasBlockingDependency = eligibleDimensions.some((dimension) => dimension.questionId === "use_case");
 
   return {
     contractVersion: "adaptive-question-turn-v1",
     subjectBrief,
     history,
     knownFacts,
-    budget: { class: "sparse", limit: 10, used: history.length, remaining: 10 - history.length },
+    coveredPillars,
+    completionEligible: coveredPillars.length === 4 && !hasBlockingDependency && history.length <= budget.limit,
+    budget,
     eligibleDimensions,
   };
 }
@@ -183,7 +184,7 @@ export function buildAdaptiveProviderBody(snapshot: AdaptiveTurnSnapshot) {
       type: "function",
       function: {
         name: "decide_adaptive_turn",
-        description: "Choose the next Adaptive Ask and its catalog candidates.",
+        description: "Choose the next Adaptive Ask and its catalog candidates, or return legal Completion.",
         parameters: {
           type: "object",
           properties: {
@@ -229,9 +230,26 @@ export function normalizeAdaptiveResponse(raw: unknown, snapshot: AdaptiveTurnSn
     if (Object.keys(input).length !== allowedKeys.length || Object.keys(input).some((key) => !allowedKeys.includes(key))) {
       throw new Error("schema");
     }
-    if (input.done !== false || typeof input.nextQuestionId !== "string") throw new Error("ask_shape");
-    if (!validText(input.questionText) || !validText(input.helperText)) throw new Error("ask_text");
     if (!Array.isArray(input.optionIds) || input.optionIds.some((id) => typeof id !== "string")) throw new Error("option_shape");
+    if (input.done === true) {
+      if (input.nextQuestionId !== null || input.questionText !== null || input.helperText !== null || input.optionIds.length !== 0) {
+        throw new Error("completion_shape");
+      }
+      if (!snapshot.completionEligible) throw new Error("premature_completion");
+      return {
+        decision: {
+          nextQuestionId: null,
+          questionText: null,
+          helperText: null,
+          visibleOptionIds: [],
+          done: true,
+        },
+        diagnostics: { source: "model" },
+      };
+    }
+    if (input.done !== false || typeof input.nextQuestionId !== "string") throw new Error("ask_shape");
+    if (snapshot.budget.remaining < 1) throw new Error("ask_budget_exceeded");
+    if (!validText(input.questionText) || !validText(input.helperText)) throw new Error("ask_text");
     const optionIds = input.optionIds as string[];
     if (optionIds.length < 3 || optionIds.length > 6 || new Set(optionIds).size !== optionIds.length) {
       throw new Error("option_cardinality");
