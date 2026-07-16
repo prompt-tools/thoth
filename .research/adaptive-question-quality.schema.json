@@ -1,0 +1,166 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "adaptive-question-quality.schema.json",
+  "type": "object",
+  "required": ["$schema", "meta", "runConfig", "fixtures"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "const": "./adaptive-question-quality.schema.json" },
+    "meta": {
+      "type": "object",
+      "required": ["suiteId", "schemaVersion", "fixtureVersion"],
+      "additionalProperties": false,
+      "properties": {
+        "suiteId": { "const": "adaptive-question-quality" },
+        "schemaVersion": { "const": "1.0.0" },
+        "fixtureVersion": { "type": "string", "minLength": 1 }
+      }
+    },
+    "runConfig": { "$ref": "#/definitions/runConfig" },
+    "fixtures": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/definitions/fixture" }
+    }
+  },
+  "definitions": {
+    "sampling": {
+      "type": "object",
+      "required": ["temperature", "topP"],
+      "additionalProperties": false,
+      "properties": {
+        "temperature": { "const": 0 },
+        "topP": { "const": 1 }
+      }
+    },
+    "modelConfig": {
+      "type": "object",
+      "required": ["provider", "model", "sampling", "maxOutputTokens", "thinking"],
+      "properties": {
+        "provider": { "const": "deepseek" },
+        "model": { "const": "deepseek-v4-flash" },
+        "sampling": { "$ref": "#/definitions/sampling" },
+        "maxOutputTokens": { "type": "integer", "minimum": 1 },
+        "thinking": { "const": "disabled" },
+        "systemPromptVersion": { "type": "string", "minLength": 1 },
+        "promptVersion": { "type": "string", "minLength": 1 }
+      }
+    },
+    "runConfig": {
+      "type": "object",
+      "required": ["repetitions", "routing", "judge", "turnBudgets"],
+      "additionalProperties": false,
+      "properties": {
+        "repetitions": { "const": 5 },
+        "routing": {
+          "allOf": [
+            { "$ref": "#/definitions/modelConfig" },
+            { "required": ["systemPromptVersion"] }
+          ]
+        },
+        "judge": {
+          "allOf": [
+            { "$ref": "#/definitions/modelConfig" },
+            { "required": ["promptVersion"] }
+          ]
+        },
+        "turnBudgets": {
+          "type": "object",
+          "required": ["sparse", "partial", "detailed"],
+          "additionalProperties": false,
+          "properties": {
+            "sparse": { "const": 10 },
+            "partial": { "const": 7 },
+            "detailed": { "const": 4 }
+          }
+        }
+      }
+    },
+    "idSet": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" }
+    },
+    "optionIdSet": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "pattern": "^image_[a-z0-9_]+:[a-z0-9_]+$" }
+    },
+    "historyItem": {
+      "type": "object",
+      "required": ["questionId", "selectedOptionIds"],
+      "additionalProperties": false,
+      "properties": {
+        "questionId": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+        "selectedOptionIds": { "$ref": "#/definitions/optionIdSet" },
+        "freeText": { "type": "string", "pattern": "\\S" }
+      },
+      "anyOf": [
+        { "properties": { "selectedOptionIds": { "minItems": 1 } } },
+        { "required": ["freeText"] }
+      ]
+    },
+    "candidatePolicy": {
+      "type": "object",
+      "required": ["allowedCandidateIds", "forbiddenCandidateIds"],
+      "additionalProperties": false,
+      "properties": {
+        "allowedCandidateIds": { "$ref": "#/definitions/optionIdSet" },
+        "forbiddenCandidateIds": { "$ref": "#/definitions/optionIdSet" }
+      }
+    },
+    "knownFact": {
+      "type": "object",
+      "required": ["dimension", "value", "source", "specificity", "pillar", "materiallyDifferentiating"],
+      "additionalProperties": false,
+      "properties": {
+        "dimension": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+        "value": { "type": "string", "pattern": "\\S" },
+        "source": { "enum": ["brief", "history"] },
+        "specificity": { "enum": ["exact", "broad"] },
+        "pillar": { "enum": ["characterSignature", "narrativeBehavior", "visualWorld", "presentationPurpose"] },
+        "materiallyDifferentiating": { "type": "boolean" },
+        "knownOptionIds": { "$ref": "#/definitions/optionIdSet" },
+        "candidatePolicy": { "$ref": "#/definitions/candidatePolicy" }
+      }
+    },
+    "mustNotAskReasons": {
+      "type": "object",
+      "additionalProperties": {
+        "enum": ["known_fact", "conflict", "irrelevant", "delivery_constraint", "budget"]
+      }
+    },
+    "fixture": {
+      "type": "object",
+      "required": ["id", "brief", "history", "mode", "budgetClass", "expectedAction", "acceptableNext", "mustNotAsk", "mustNotAskReasons", "expectedKnownFacts"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+        "brief": { "type": "string", "pattern": "\\S" },
+        "history": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/historyItem" }
+        },
+        "mode": { "const": "adaptive" },
+        "budgetClass": { "enum": ["sparse", "partial", "detailed"] },
+        "expectedAction": { "enum": ["ask", "complete"] },
+        "acceptableNext": { "$ref": "#/definitions/idSet" },
+        "mustNotAsk": { "$ref": "#/definitions/idSet" },
+        "mustNotAskReasons": { "$ref": "#/definitions/mustNotAskReasons" },
+        "expectedKnownFacts": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/definitions/knownFact" }
+        },
+        "dependencyReason": { "type": "string", "pattern": "\\S" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "expectedAction": { "const": "ask" } } },
+          "then": { "properties": { "acceptableNext": { "minItems": 2, "maxItems": 4 } } },
+          "else": { "properties": { "acceptableNext": { "maxItems": 0 } } }
+        }
+      ]
+    }
+  }
+}
