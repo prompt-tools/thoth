@@ -164,7 +164,8 @@ export function buildAdaptiveTurnSnapshot(input: unknown): AdaptiveTurnSnapshot 
     knownFacts.filter((fact) => fact.materiallyDifferentiating).map((fact) => fact.pillar),
   );
   const coveredPillars = pillarOrder.filter((pillar) => coverage.has(pillar));
-  const hasBlockingDependency = eligibleDimensions.some((dimension) => dimension.questionId === "use_case");
+  const hasBlockingDependency = unresolvedDimensions.length > 0
+    || eligibleDimensions.some((dimension) => dimension.questionId === "use_case");
 
   return {
     contractVersion: "adaptive-question-turn-v1",

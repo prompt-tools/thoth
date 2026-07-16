@@ -215,6 +215,101 @@ describe("POST /api/adaptive-turn", () => {
     expect(result.decision.visibleOptionIds).not.toContain(wrongDimensionId);
   });
 
+  it("rejects a premature model Completion for an explicitly unresolved background", async () => {
+    vi.stubEnv("ADAPTIVE_ROUTING_ENABLED", "1");
+    vi.stubEnv("DEMO_DEEPSEEK_KEY", "server-key");
+    vi.stubEnv("ADAPTIVE_TURN_SECRET", TURN_SECRET);
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      choices: [{
+        finish_reason: "tool_calls",
+        message: {
+          tool_calls: [{
+            function: {
+              name: "decide_adaptive_turn",
+              arguments: JSON.stringify({
+                done: true,
+                nextQuestionId: null,
+                questionText: null,
+                helperText: null,
+                optionIds: [],
+              }),
+            },
+          }],
+        },
+      }],
+    }))));
+
+    const response = await POST(new Request("http://localhost/api/adaptive-turn", {
+      method: "POST",
+      headers: { authorization: "Bearer __demo__", "content-type": "application/json" },
+      body: JSON.stringify({
+        subjectBrief: "女船长怒视镜头，低机位，背景还没想好，电影海报",
+        history: [],
+        precision: "simple",
+      }),
+    }));
+    const result = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(result).toMatchObject({
+      decision: { nextQuestionId: "scene", done: false },
+      diagnostics: { source: "fallback", reason: "premature_completion" },
+      turnToken: expect.any(String),
+    });
+  });
+
+  it("keeps an explicit white background out of a sparse route request", async () => {
+    vi.stubEnv("ADAPTIVE_ROUTING_ENABLED", "1");
+    vi.stubEnv("DEMO_DEEPSEEK_KEY", "server-key");
+    vi.stubEnv("ADAPTIVE_TURN_SECRET", TURN_SECRET);
+    const framingIds = buildCatalogManifest()
+      .find((dimension) => dimension.questionId === "framing")!
+      .options.slice(0, 3)
+      .map((option) => option.id);
+    const providerResponse = {
+      choices: [{
+        finish_reason: "tool_calls",
+        message: {
+          tool_calls: [{
+            function: {
+              name: "decide_adaptive_turn",
+              arguments: JSON.stringify({
+                done: false,
+                nextQuestionId: "framing",
+                questionText: "这张职业头像更适合哪种取景范围？",
+                helperText: "取景范围会影响职业头像的正式感与亲近感。",
+                optionIds: framingIds,
+              }),
+            },
+          }],
+        },
+      }],
+    };
+    const fetchSpy = vi.fn().mockResolvedValue(new Response(JSON.stringify(providerResponse)));
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const response = await POST(new Request("http://localhost/api/adaptive-turn", {
+      method: "POST",
+      headers: { authorization: "Bearer __demo__", "content-type": "application/json" },
+      body: JSON.stringify({
+        subjectBrief: "用于求职简历的职业头像，白色背景，正式可信",
+        history: [],
+        precision: "simple",
+      }),
+    }));
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      decision: { nextQuestionId: "framing", done: false },
+      diagnostics: { source: "model" },
+    });
+    const providerBody = JSON.parse((fetchSpy.mock.calls[0][1] as RequestInit).body as string);
+    const snapshot = JSON.parse(providerBody.messages[1].content);
+    expect(snapshot.budget).toMatchObject({ class: "sparse", limit: 10 });
+    expect(snapshot.eligibleDimensions.map((dimension: { questionId: string }) => dimension.questionId))
+      .not.toContain("scene");
+  });
+
   it("rejects a history that has exhausted the 10-turn sparse budget before calling DeepSeek", async () => {
     vi.stubEnv("ADAPTIVE_ROUTING_ENABLED", "1");
     vi.stubEnv("DEMO_DEEPSEEK_KEY", "server-key");
@@ -308,7 +403,11 @@ describe("POST /api/adaptive-turn", () => {
     const scene = buildCatalogManifest().find((dimension) => dimension.questionId === "scene")!;
     const shownIds = scene.options.slice(0, 3).map((option) => option.id);
     const hiddenButCatalogValidId = scene.options[4].id;
-    const fetchSpy = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+    const framingIds = buildCatalogManifest()
+      .find((dimension) => dimension.questionId === "framing")!
+      .options.slice(0, 3)
+      .map((option) => option.id);
+    const firstAsk = new Response(JSON.stringify({
       choices: [{
         finish_reason: "tool_calls",
         message: {
@@ -326,7 +425,29 @@ describe("POST /api/adaptive-turn", () => {
           }],
         },
       }],
-    })));
+    }));
+    const secondAsk = new Response(JSON.stringify({
+      choices: [{
+        finish_reason: "tool_calls",
+        message: {
+          tool_calls: [{
+            function: {
+              name: "decide_adaptive_turn",
+              arguments: JSON.stringify({
+                done: false,
+                nextQuestionId: "framing",
+                questionText: "这位游侠更适合哪种取景范围？",
+                helperText: "取景范围会决定人物与世界环境的叙事比例。",
+                optionIds: framingIds,
+              }),
+            },
+          }],
+        },
+      }],
+    }));
+    const fetchSpy = vi.fn()
+      .mockResolvedValueOnce(firstAsk)
+      .mockResolvedValueOnce(secondAsk);
     vi.stubGlobal("fetch", fetchSpy);
 
     const firstResponse = await POST(new Request("http://localhost/api/adaptive-turn", {
@@ -365,8 +486,17 @@ describe("POST /api/adaptive-turn", () => {
     const valid = await validResponse.json();
 
     expect(validResponse.status).toBe(200);
-    expect(valid.decision.done).toBe(false);
+    expect(valid).toMatchObject({
+      decision: { nextQuestionId: "framing", visibleOptionIds: framingIds, done: false },
+      diagnostics: { source: "model" },
+    });
     expect(valid.turnToken).toEqual(expect.any(String));
     expect(fetchSpy).toHaveBeenCalledTimes(2);
+    const secondProviderBody = JSON.parse((fetchSpy.mock.calls[1][1] as RequestInit).body as string);
+    const secondSnapshot = JSON.parse(secondProviderBody.messages[1].content);
+    expect(secondSnapshot).toMatchObject({
+      budget: { class: "sparse", limit: 10, used: 1, remaining: 9 },
+      history: [{ questionId: "scene", selectedOptionIds: [shownIds[0]] }],
+    });
   });
 });

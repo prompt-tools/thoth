@@ -67,6 +67,53 @@ describe("Adaptive multi-turn snapshot", () => {
     expect(snapshot.completionEligible).toBe(false);
   });
 
+  it.each([
+    "随便，都可以",
+    "无所谓",
+    "不限",
+    "默认",
+    "看着办",
+    "可能，不一定",
+  ])("does not count low-information history text as material coverage: %s", (freeText) => {
+    const snapshot = buildAdaptiveTurnSnapshot({
+      subjectBrief: "原创游侠角色",
+      history: [{ questionId: "scene", selectedOptionIds: [], freeText }],
+      precision: "simple",
+    });
+    const fact = snapshot.knownFacts.find((item) => item.source === "history" && item.dimension === "scene");
+
+    expect(fact?.materiallyDifferentiating).toBe(false);
+    expect(snapshot.coveredPillars).not.toContain("visualWorld");
+  });
+
+  it("keeps an explicitly undecided outfit eligible and blocks Completion", () => {
+    const snapshot = buildAdaptiveTurnSnapshot({
+      subjectBrief: "女船长怒视镜头，站在暴风雨甲板，电影海报，穿什么都可以",
+      history: [],
+      precision: "simple",
+    });
+
+    expect(snapshot.knownFacts.find((fact) => fact.dimension === "outfit")).toBeUndefined();
+    expect(snapshot.eligibleDimensions.map((dimension) => dimension.questionId)).toContain("outfit");
+    expect(snapshot.completionEligible).toBe(false);
+  });
+
+  it("does not allow four-pillar coverage to bypass an explicitly unresolved background", () => {
+    const snapshot = buildAdaptiveTurnSnapshot({
+      subjectBrief: "女船长怒视镜头，低机位，背景还没想好，电影海报",
+      history: [],
+      precision: "simple",
+    });
+
+    expect(snapshot.coveredPillars).toEqual([
+      "characterSignature", "narrativeBehavior", "visualWorld", "presentationPurpose",
+    ]);
+    expect(snapshot.eligibleDimensions.map((dimension) => dimension.questionId)).toContain("scene");
+    expect(snapshot.completionEligible).toBe(false);
+    expect(normalizeAdaptiveResponse(completionResponse(), snapshot).diagnostics)
+      .toMatchObject({ source: "fallback", reason: "premature_completion" });
+  });
+
   it("uses exact Brief catalog facts to remove cross-dimension conflicts", () => {
     const snapshot = buildAdaptiveTurnSnapshot({
       subjectBrief: "少年游侠角色，体型还没想好",

@@ -105,10 +105,10 @@ const RULES: BriefRule[] = [
   { dimension: "detail_level", pattern: /电影级高细节|高精细|高细节|精细/, knownOptionIds: (value) => value === "电影级高细节" ? ["image_detail_level:cinematic_quality", "image_detail_level:high_detail"] : value === "高精细" ? ["image_detail_level:high_detail", "image_detail_level:sharp_clean"] : value.includes("高细节") ? ["image_detail_level:high_detail"] : [] },
 ];
 
-const UNKNOWN_MARKER = /没想好|不知道|不确定|未定|待定|请帮我决定|帮我决定|你来决定/;
+const UNKNOWN_MARKER = /没想好|不知道|不确定|未定|待定|请帮我决定|帮我决定|你来决定|随便|都可以|无所谓|不限|默认|看着办|可能|不一定/;
 const UNKNOWN_DIMENSION_PATTERNS: Record<string, RegExp> = {
   scene: /背景|场景/,
-  outfit: /服装|穿搭/,
+  outfit: /服装|穿搭|穿什么|衣服/,
   portrait_expression: /表情/,
   lighting: /光线|光效|打光/,
   color_palette: /色调|配色/,
@@ -127,6 +127,10 @@ function subjectMaterial(brief: string): boolean {
   return !/^(?:一个人|人物|职业头像|用于求职简历的职业头像)[，,]?/.test(brief.trim());
 }
 
+function subjectSpecificity(brief: string): "exact" | "broad" {
+  return /^(?:职业头像|用于求职简历的职业头像)[，,]?/.test(brief.trim()) ? "broad" : "exact";
+}
+
 export function analyzeAdaptiveBrief(subjectBrief: string): AdaptiveKnownFact[] {
   const facts = new Map<string, AdaptiveKnownFact>();
   const uncertainDimensions = new Set(unresolvedBriefDimensions(subjectBrief));
@@ -135,7 +139,7 @@ export function analyzeAdaptiveBrief(subjectBrief: string): AdaptiveKnownFact[] 
     dimension: "subject",
     value: subjectBrief,
     source: "brief",
-    specificity: material ? "exact" : "broad",
+    specificity: subjectSpecificity(subjectBrief),
     pillar: "characterSignature",
     materiallyDifferentiating: material,
   });

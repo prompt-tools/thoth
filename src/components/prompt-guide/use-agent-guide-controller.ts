@@ -162,6 +162,9 @@ export function useAgentGuideController() {
   const sessionIdRef = useRef("");
   // Server-signed proof of the Ask whose answer may advance Adaptive history.
   const turnTokenRef = useRef("");
+  // The answer remains pending until the server accepts it. Retry must resend
+  // this exact signed history extension, not the last committed prefix.
+  const pendingHistoryRef = useRef<AgentHistoryItem[] | null>(null);
 
   /** Fire-and-forget telemetry: persist this session's full step log (presented option ids
    *  + user selections + auto-fills + final prompt) to /api/telemetry → Langfuse. Uses
@@ -314,6 +317,7 @@ export function useAgentGuideController() {
           setHistory(nextHistory);
           setSelections(acceptedSelections);
           setFreeTexts(acceptedFreeTexts);
+          pendingHistoryRef.current = null;
         }
 
         // Track consecutive fallbacks — if ≥ 2, stop dragging and end
@@ -424,6 +428,7 @@ export function useAgentGuideController() {
       sessionRef.current++; // void any in-flight fetch from a prior session
       consecutiveFallbackRef.current = 0;
       turnTokenRef.current = "";
+      pendingHistoryRef.current = null;
       // Collect a free-text description first; the agent routes from it.
       setPhase("describe");
     },
@@ -453,6 +458,7 @@ export function useAgentGuideController() {
       setAutoFilledQuestionIds(new Set());
       clearAgentLog();
       turnTokenRef.current = "";
+      pendingHistoryRef.current = null;
       sessionIdRef.current = (typeof crypto !== "undefined" && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now());
       logAgent("describe", { text: text.trim() || "(空，直接开始)", primaryType: routePrimaryType(text) });
       setPhase("asking");
@@ -536,8 +542,8 @@ export function useAgentGuideController() {
     if (draft.length === 0 && !text) return;
     const questionId = decision.nextQuestionId;
     if (!questionId) return;
-    let picked = draft;
-    if (questionId === "subject" && picked.length === 0) {
+    let picked = ADAPTIVE_ROUTING && text ? [] : draft;
+    if (questionId === "subject" && picked.length === 0 && !(ADAPTIVE_ROUTING && text)) {
       picked = inferSubjectOptionIds(descriptionRef.current, primaryType);
     }
     const nextHistory = appendAnswer(history, questionId, picked, text || undefined);
@@ -557,6 +563,7 @@ export function useAgentGuideController() {
       });
       setHistory(nextHistory);
     }
+    if (ADAPTIVE_ROUTING) pendingHistoryRef.current = nextHistory;
     flushTelemetry("submit"); // checkpoint each answer (captures abandonment too)
     void fetchNext(nextHistory);
   }, [decision, currentDimension, draft, draftText, history, fetchNext, flushTelemetry, primaryType]);
@@ -580,6 +587,7 @@ export function useAgentGuideController() {
       }
       setHistory(nextHistory);
     }
+    if (ADAPTIVE_ROUTING) pendingHistoryRef.current = nextHistory;
     setDraft([]);
     setDraftText("");
     flushTelemetry("skip");
@@ -648,18 +656,20 @@ export function useAgentGuideController() {
     sessionRef.current++; // void any in-flight fetch
     consecutiveFallbackRef.current = 0;
     turnTokenRef.current = "";
+    pendingHistoryRef.current = null;
     logAgent("restart");
     // Back to the description step so the user can restate their goal.
     setPhase("describe");
   }, []);
 
   const retryStep = useCallback(() => {
-    void fetchNext(history);
+    void fetchNext(pendingHistoryRef.current ?? history);
   }, [history, fetchNext]);
 
   /** Return to the key/provider gate to switch provider or re-enter a key. */
   const reconfigure = useCallback(() => {
     sessionRef.current++; // void any in-flight fetch
+    pendingHistoryRef.current = null;
     logAgent("reconfigure");
     if (BUILTIN_DEMO) return;
     setPhase("needsKey");
