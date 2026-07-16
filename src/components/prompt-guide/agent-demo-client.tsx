@@ -165,7 +165,11 @@ function DescribeStep({
   const [text, setText] = useState("");
   return (
     <section className="rounded-md border border-slate-200 bg-white p-5">
-      <PrecisionSelector value={precision} onChange={onPrecisionChange} />
+      {!requireDescription ? (
+        <PrecisionSelector value={precision} onChange={onPrecisionChange} />
+      ) : (
+        <p className="text-xs font-medium text-teal-700">系统会根据你已写清的信息自动决定还需要问几题。</p>
+      )}
       <h2 className="mt-4 text-base font-semibold text-slate-950">用一句话说说你想要的人物或角色</h2>
       <p className="mt-1 text-sm leading-6 text-slate-600">
         随便说，比如「海边回眸的女生，胶片感」或「乙游男主牵手 POV」。若描述的是产品、动物或纯风景，请改写成人物/角色场景；AI 会据此决定先问哪些维度。画质负向词与未成年保护会自动写入最终 prompt，无需单独选择。
@@ -456,7 +460,11 @@ function AgentDemo() {
         {phase === "asking" ? (
           <section className="rounded-md border border-slate-200 bg-white p-5">
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-              <PrecisionSelector value={precision} onChange={setPrecision} />
+              {!adaptiveRouting ? (
+                <PrecisionSelector value={precision} onChange={setPrecision} />
+              ) : (
+                <span className="text-xs font-medium text-teal-700">自适应提问</span>
+              )}
               <span className="text-xs text-slate-400">当前方向：人像/角色</span>
             </div>
             {loading || !currentDimension ? (
@@ -550,14 +558,16 @@ function AgentDemo() {
                   >
                     跳过这一步
                   </button>
-                  <button
-                    type="button"
-                    onClick={finishNow}
-                    disabled={history.length === 0}
-                    className="text-sm font-medium text-teal-700 underline-offset-2 hover:underline disabled:cursor-not-allowed disabled:text-slate-400 disabled:no-underline"
-                  >
-                    够了，直接生成
-                  </button>
+                  {!adaptiveRouting ? (
+                    <button
+                      type="button"
+                      onClick={finishNow}
+                      disabled={history.length === 0}
+                      className="text-sm font-medium text-teal-700 underline-offset-2 hover:underline disabled:cursor-not-allowed disabled:text-slate-400 disabled:no-underline"
+                    >
+                      够了，直接生成
+                    </button>
+                  ) : null}
                 </div>
               </>
             )}
@@ -569,7 +579,7 @@ function AgentDemo() {
             <section className="rounded-md border border-slate-200 bg-white p-5">
               <h2 className="text-base font-semibold text-slate-950">完成</h2>
               <p className="mt-1 text-sm leading-6 text-slate-600">
-                提示词已由你选中的选项确定性拼接。可选地让 AI 润色措辞（不改变语义）。
+                提示词已由你的原始描述与确认答案确定性生成。可选地让 AI 润色措辞（不改变语义）。
               </p>
               <div className="mt-4 flex flex-wrap items-center gap-3">
                 <Button

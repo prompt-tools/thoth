@@ -10,13 +10,13 @@ export interface AgentHistoryItem {
  *  tool-use so we never parse free text. */
 export interface AgentDecision {
   /** Dimension id to ask next. Must exist in the catalog manifest. */
-  nextQuestionId: string;
+  nextQuestionId: string | null;
   /** Contextual wording for an Adaptive Ask. Fixed routing uses the catalog title. */
-  questionText?: string;
+  questionText?: string | null;
   /** Subset of that dimension's option ids to surface (the agent narrows). */
   visibleOptionIds: string[];
   /** One short zh sentence guiding the user on this step. */
-  helperText?: string;
+  helperText?: string | null;
   /** True when the agent judges it has gathered enough to produce a prompt. */
   done: boolean;
 }
