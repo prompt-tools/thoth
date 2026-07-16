@@ -219,7 +219,7 @@ describe("POST /api/adaptive-turn", () => {
     vi.stubEnv("ADAPTIVE_ROUTING_ENABLED", "1");
     vi.stubEnv("DEMO_DEEPSEEK_KEY", "server-key");
     vi.stubEnv("ADAPTIVE_TURN_SECRET", TURN_SECRET);
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({
+    const completionPayload = {
       choices: [{
         finish_reason: "tool_calls",
         message: {
@@ -237,7 +237,11 @@ describe("POST /api/adaptive-turn", () => {
           }],
         },
       }],
-    }))));
+    };
+    const fetchSpy = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify(completionPayload)))
+      .mockResolvedValueOnce(new Response(JSON.stringify(completionPayload)));
+    vi.stubGlobal("fetch", fetchSpy);
 
     const response = await POST(new Request("http://localhost/api/adaptive-turn", {
       method: "POST",
@@ -256,6 +260,30 @@ describe("POST /api/adaptive-turn", () => {
       diagnostics: { source: "fallback", reason: "premature_completion" },
       turnToken: expect.any(String),
     });
+
+    const secondResponse = await POST(new Request("http://localhost/api/adaptive-turn", {
+      method: "POST",
+      headers: { authorization: "Bearer __demo__", "content-type": "application/json" },
+      body: JSON.stringify({
+        subjectBrief: "女船长怒视镜头，低机位，背景还没想好，电影海报",
+        history: [{ questionId: "scene", selectedOptionIds: [result.decision.visibleOptionIds[0]] }],
+        precision: "simple",
+        turnToken: result.turnToken,
+      }),
+    }));
+
+    expect(secondResponse.status).toBe(200);
+    expect(await secondResponse.json()).toEqual({
+      decision: {
+        nextQuestionId: null,
+        questionText: null,
+        helperText: null,
+        visibleOptionIds: [],
+        done: true,
+      },
+      diagnostics: { source: "model" },
+    });
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
   });
 
   it("keeps an explicit white background out of a sparse route request", async () => {

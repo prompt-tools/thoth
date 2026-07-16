@@ -114,6 +114,20 @@ describe("Adaptive multi-turn snapshot", () => {
       .toMatchObject({ source: "fallback", reason: "premature_completion" });
   });
 
+  it("clears an unresolved blocker after the user gives that dimension a concrete answer", () => {
+    const snapshot = buildAdaptiveTurnSnapshot({
+      subjectBrief: "女船长怒视镜头，低机位，背景还没想好，电影海报",
+      history: [{ questionId: "scene", selectedOptionIds: ["image_scene:neon_cityscape"] }],
+      precision: "simple",
+    });
+
+    expect(snapshot.eligibleDimensions.map((dimension) => dimension.questionId)).not.toContain("scene");
+    expect(snapshot.coveredPillars).toHaveLength(4);
+    expect(snapshot.completionEligible).toBe(true);
+    expect(normalizeAdaptiveResponse(completionResponse(), snapshot).diagnostics)
+      .toMatchObject({ source: "model" });
+  });
+
   it("uses exact Brief catalog facts to remove cross-dimension conflicts", () => {
     const snapshot = buildAdaptiveTurnSnapshot({
       subjectBrief: "少年游侠角色，体型还没想好",

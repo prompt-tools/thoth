@@ -138,7 +138,14 @@ export function buildAdaptiveTurnSnapshot(input: unknown): AdaptiveTurnSnapshot 
   const broadDimensions = knownFacts
     .filter((fact) => fact.source === "brief" && fact.specificity === "broad" && fact.dimension !== "subject")
     .map((fact) => fact.dimension);
-  const unresolvedDimensions = unresolvedBriefDimensions(subjectBrief);
+  const resolvedHistoryDimensions = new Set(
+    history
+      .filter((item) => item.selectedOptionIds.length > 0
+        || materialHistoryValue(item.questionId, item.selectedOptionIds, item.freeText))
+      .map((item) => item.questionId),
+  );
+  const unresolvedDimensions = unresolvedBriefDimensions(subjectBrief)
+    .filter((questionId) => !resolvedHistoryDimensions.has(questionId));
   const shouldAskUseCase = !exactDimensions.has("use_case")
     && /职业|品牌|公司|团队|头像|封面|宣传|海报/.test(subjectBrief);
   const questionOrder = [...new Set([...(shouldAskUseCase ? ["use_case"] : []), ...unresolvedDimensions, ...broadDimensions, ...ordered])]
