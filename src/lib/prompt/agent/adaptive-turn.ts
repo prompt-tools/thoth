@@ -127,6 +127,9 @@ export function buildAdaptiveTurnSnapshot(input: unknown): AdaptiveTurnSnapshot 
   );
   const deliverySuppressions = new Set<string>();
   if (exactDimensions.has("output_format") && /透明\s*PNG/i.test(subjectBrief)) deliverySuppressions.add("scene");
+  if (exactDimensions.has("framing") && exactDimensions.has("use_case") && /头像/.test(subjectBrief)) {
+    deliverySuppressions.add("scene");
+  }
   const broadDimensions = knownFacts
     .filter((fact) => fact.source === "brief" && fact.specificity === "broad" && fact.dimension !== "subject")
     .map((fact) => fact.dimension);

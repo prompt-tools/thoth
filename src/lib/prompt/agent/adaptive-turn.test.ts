@@ -39,6 +39,18 @@ function malformedCompletionResponse() {
 }
 
 describe("Adaptive multi-turn snapshot", () => {
+  it.each([
+    ["银发女骑士角色设定表，正侧背三视图，白底", ["camera_angle", "pose", "scene"]],
+    ["疲惫的私家侦探，黑色小说封面", ["mood", "use_case"]],
+    ["动画主视觉：英雄们冲过暴风雪，强烈速度感", ["scene", "pose", "use_case"]],
+    ["月光下的精灵弓手站在魔法森林里", ["lighting", "scene"]],
+    ["时尚男模社交媒体头像，近距离裁切，极简高级", ["scene", "framing", "use_case"]],
+  ])("suppresses fixture Known facts and deterministic irrelevancies for %s", (subjectBrief, suppressed) => {
+    const snapshot = buildAdaptiveTurnSnapshot({ subjectBrief, history: [], precision: "simple" });
+    const eligible = snapshot.eligibleDimensions.map((dimension) => dimension.questionId);
+    expect(eligible).not.toEqual(expect.arrayContaining(suppressed));
+  });
+
   it("derives a sparse 10-turn budget and suppresses an explicit background", () => {
     const snapshot = buildAdaptiveTurnSnapshot({
       subjectBrief: "用于求职简历的职业头像，白色背景，正式可信",
