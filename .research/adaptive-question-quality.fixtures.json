@@ -1,0 +1,2362 @@
+{
+  "$schema": "./adaptive-question-quality.schema.json",
+  "meta": {
+    "suiteId": "adaptive-question-quality",
+    "schemaVersion": "1.0.0",
+    "fixtureVersion": "2026-07-14.3"
+  },
+  "runConfig": {
+    "repetitions": 5,
+    "routing": {
+      "provider": "deepseek",
+      "model": "deepseek-v4-flash",
+      "systemPromptVersion": "adaptive-question-system-v1",
+      "sampling": {
+        "temperature": 0,
+        "topP": 1
+      },
+      "maxOutputTokens": 512,
+      "thinking": "disabled"
+    },
+    "judge": {
+      "provider": "deepseek",
+      "model": "deepseek-v4-flash",
+      "promptVersion": "adaptive-question-judge-v1",
+      "sampling": {
+        "temperature": 0,
+        "topP": 1
+      },
+      "maxOutputTokens": 1024,
+      "thinking": "disabled"
+    },
+    "turnBudgets": {
+      "sparse": 10,
+      "partial": 7,
+      "detailed": 4
+    }
+  },
+  "fixtures": [
+    {
+      "id": "business-portrait",
+      "brief": "职业女性肖像，干练但亲和",
+      "history": [],
+      "mode": "adaptive",
+      "budgetClass": "partial",
+      "acceptableNext": [
+        "use_case",
+        "art_style",
+        "outfit",
+        "scene"
+      ],
+      "mustNotAsk": [
+        "gender_presentation",
+        "mood"
+      ],
+      "expectedKnownFacts": [
+        {
+          "dimension": "subject",
+          "value": "职业女性",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "characterSignature",
+          "materiallyDifferentiating": true
+        },
+        {
+          "dimension": "gender_presentation",
+          "value": "女性",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "characterSignature",
+          "materiallyDifferentiating": true
+        },
+        {
+          "dimension": "mood",
+          "value": "干练但亲和",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "presentationPurpose",
+          "materiallyDifferentiating": true
+        }
+      ],
+      "dependencyReason": "Resume, editorial, brand, and social outputs change framing, scene, and style eligibility.",
+      "expectedAction": "ask",
+      "mustNotAskReasons": {
+        "gender_presentation": "known_fact",
+        "mood": "known_fact"
+      }
+    },
+    {
+      "id": "xiaohongshu-cover",
+      "brief": "小红书封面：春日氛围的年轻女生，要留标题位置",
+      "history": [],
+      "mode": "adaptive",
+      "budgetClass": "partial",
+      "acceptableNext": [
+        "art_style",
+        "outfit",
+        "pose",
+        "scene"
+      ],
+      "mustNotAsk": [
+        "use_case",
+        "composition",
+        "gender_presentation"
+      ],
+      "expectedKnownFacts": [
+        {
+          "dimension": "subject",
+          "value": "年轻女生",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "characterSignature",
+          "materiallyDifferentiating": true
+        },
+        {
+          "dimension": "gender_presentation",
+          "value": "女生",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "characterSignature",
+          "materiallyDifferentiating": true
+        },
+        {
+          "dimension": "use_case",
+          "value": "小红书封面",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "presentationPurpose",
+          "materiallyDifferentiating": true
+        },
+        {
+          "dimension": "composition",
+          "value": "留标题位置",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "visualWorld",
+          "materiallyDifferentiating": true
+        },
+        {
+          "dimension": "mood",
+          "value": "春日氛围",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "presentationPurpose",
+          "materiallyDifferentiating": true
+        }
+      ],
+      "expectedAction": "ask",
+      "mustNotAskReasons": {
+        "use_case": "known_fact",
+        "composition": "known_fact",
+        "gender_presentation": "known_fact"
+      }
+    },
+    {
+      "id": "otome-pov",
+      "brief": "乙游男主牵着我的手，第一人称视角，温柔心动",
+      "history": [],
+      "mode": "adaptive",
+      "budgetClass": "detailed",
+      "acceptableNext": [
+        "portrait_expression",
+        "scene",
+        "outfit",
+        "character_render_style"
+      ],
+      "mustNotAsk": [
+        "character_interaction",
+        "camera_angle",
+        "gender_presentation",
+        "mood"
+      ],
+      "expectedKnownFacts": [
+        {
+          "dimension": "subject",
+          "value": "乙游男主",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "characterSignature",
+          "materiallyDifferentiating": true
+        },
+        {
+          "dimension": "person_type",
+          "value": "乙游角色",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "characterSignature",
+          "materiallyDifferentiating": true,
+          "knownOptionIds": [
+            "image_person_type:otome_visual_novel"
+          ]
+        },
+        {
+          "dimension": "gender_presentation",
+          "value": "男性",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "characterSignature",
+          "materiallyDifferentiating": true,
+          "knownOptionIds": [
+            "image_gender_presentation:masculine"
+          ]
+        },
+        {
+          "dimension": "character_interaction",
+          "value": "牵手",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "narrativeBehavior",
+          "materiallyDifferentiating": true
+        },
+        {
+          "dimension": "camera_angle",
+          "value": "第一人称视角",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "visualWorld",
+          "materiallyDifferentiating": true
+        },
+        {
+          "dimension": "mood",
+          "value": "温柔心动",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "presentationPurpose",
+          "materiallyDifferentiating": true
+        }
+      ],
+      "expectedAction": "ask",
+      "mustNotAskReasons": {
+        "character_interaction": "known_fact",
+        "camera_angle": "known_fact",
+        "gender_presentation": "known_fact",
+        "mood": "known_fact"
+      }
+    },
+    {
+      "id": "game-card",
+      "brief": "银发剑士手游卡面，手持长剑",
+      "history": [],
+      "mode": "adaptive",
+      "budgetClass": "partial",
+      "acceptableNext": [
+        "hair",
+        "outfit",
+        "pose",
+        "scene"
+      ],
+      "mustNotAsk": [
+        "use_case",
+        "character_props",
+        "person_type",
+        "character_render_style"
+      ],
+      "expectedKnownFacts": [
+        {
+          "dimension": "subject",
+          "value": "银发剑士",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "characterSignature",
+          "materiallyDifferentiating": true
+        },
+        {
+          "dimension": "person_type",
+          "value": "游戏角色",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "characterSignature",
+          "materiallyDifferentiating": true,
+          "knownOptionIds": [
+            "image_person_type:game_character"
+          ]
+        },
+        {
+          "dimension": "hair",
+          "value": "银色",
+          "source": "brief",
+          "specificity": "broad",
+          "pillar": "characterSignature",
+          "materiallyDifferentiating": true,
+          "candidatePolicy": {
+            "allowedCandidateIds": [
+              "image_hair:long_straight",
+              "image_hair:long_wavy",
+              "image_hair:short_bob",
+              "image_hair:pixie_cut",
+              "image_hair:ponytail",
+              "image_hair:braids",
+              "image_hair:bun_updo",
+              "image_hair:messy_tousled",
+              "image_hair:curly_coily"
+            ],
+            "forbiddenCandidateIds": []
+          }
+        },
+        {
+          "dimension": "character_props",
+          "value": "长剑",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "characterSignature",
+          "materiallyDifferentiating": true,
+          "knownOptionIds": [
+            "image_character_props:sword"
+          ]
+        },
+        {
+          "dimension": "use_case",
+          "value": "手游卡面",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "presentationPurpose",
+          "materiallyDifferentiating": true
+        },
+        {
+          "dimension": "character_render_style",
+          "value": "手游卡面",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "presentationPurpose",
+          "materiallyDifferentiating": true,
+          "knownOptionIds": [
+            "image_character_render_style:gacha_splash_art"
+          ]
+        }
+      ],
+      "expectedAction": "ask",
+      "mustNotAskReasons": {
+        "use_case": "known_fact",
+        "character_props": "known_fact",
+        "person_type": "known_fact",
+        "character_render_style": "known_fact"
+      }
+    },
+    {
+      "id": "job-headshot",
+      "brief": "用于求职简历的职业头像，白色背景，正式可信",
+      "history": [],
+      "mode": "adaptive",
+      "budgetClass": "sparse",
+      "acceptableNext": [
+        "framing",
+        "outfit",
+        "portrait_expression",
+        "art_style"
+      ],
+      "mustNotAsk": [
+        "use_case",
+        "scene"
+      ],
+      "expectedKnownFacts": [
+        {
+          "dimension": "subject",
+          "value": "职业人物",
+          "source": "brief",
+          "specificity": "broad",
+          "pillar": "characterSignature",
+          "materiallyDifferentiating": false
+        },
+        {
+          "dimension": "use_case",
+          "value": "求职简历头像",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "presentationPurpose",
+          "materiallyDifferentiating": true
+        },
+        {
+          "dimension": "scene",
+          "value": "白色背景",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "visualWorld",
+          "materiallyDifferentiating": false,
+          "knownOptionIds": [
+            "image_scene:white_bg"
+          ]
+        },
+        {
+          "dimension": "mood",
+          "value": "正式可信",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "presentationPurpose",
+          "materiallyDifferentiating": true
+        }
+      ],
+      "expectedAction": "ask",
+      "mustNotAskReasons": {
+        "use_case": "known_fact",
+        "scene": "known_fact"
+      }
+    },
+    {
+      "id": "virtual-idol-avatar",
+      "brief": "紫发虚拟偶像直播头像，透明 PNG",
+      "history": [],
+      "mode": "adaptive",
+      "budgetClass": "partial",
+      "acceptableNext": [
+        "portrait_expression",
+        "framing",
+        "hair",
+        "character_render_style"
+      ],
+      "mustNotAsk": [
+        "scene",
+        "use_case"
+      ],
+      "expectedKnownFacts": [
+        {
+          "dimension": "subject",
+          "value": "虚拟偶像",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "characterSignature",
+          "materiallyDifferentiating": true
+        },
+        {
+          "dimension": "person_type",
+          "value": "虚拟偶像",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "characterSignature",
+          "materiallyDifferentiating": true,
+          "knownOptionIds": [
+            "image_person_type:virtual_idol"
+          ]
+        },
+        {
+          "dimension": "hair",
+          "value": "紫色",
+          "source": "brief",
+          "specificity": "broad",
+          "pillar": "characterSignature",
+          "materiallyDifferentiating": true,
+          "candidatePolicy": {
+            "allowedCandidateIds": [
+              "image_hair:long_straight",
+              "image_hair:long_wavy",
+              "image_hair:short_bob",
+              "image_hair:pixie_cut",
+              "image_hair:ponytail",
+              "image_hair:braids",
+              "image_hair:bun_updo",
+              "image_hair:messy_tousled",
+              "image_hair:curly_coily"
+            ],
+            "forbiddenCandidateIds": []
+          }
+        },
+        {
+          "dimension": "use_case",
+          "value": "直播头像",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "presentationPurpose",
+          "materiallyDifferentiating": true,
+          "knownOptionIds": [
+            "image_use_case:avatar"
+          ]
+        },
+        {
+          "dimension": "output_format",
+          "value": "透明 PNG",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "presentationPurpose",
+          "materiallyDifferentiating": true
+        },
+        {
+          "dimension": "scene",
+          "value": "无环境背景",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "visualWorld",
+          "materiallyDifferentiating": false,
+          "knownOptionIds": [
+            "image_scene:transparent_bg"
+          ]
+        }
+      ],
+      "expectedAction": "ask",
+      "mustNotAskReasons": {
+        "scene": "delivery_constraint",
+        "use_case": "known_fact"
+      }
+    },
+    {
+      "id": "character-sheet",
+      "brief": "银发女骑士角色设定表，正侧背三视图，白底",
+      "history": [],
+      "mode": "adaptive",
+      "budgetClass": "detailed",
+      "acceptableNext": [
+        "hair",
+        "outfit",
+        "character_props",
+        "face_features"
+      ],
+      "mustNotAsk": [
+        "scene",
+        "camera_angle",
+        "composition",
+        "pose",
+        "character_render_style"
+      ],
+      "expectedKnownFacts": [
+        {
+          "dimension": "subject",
+          "value": "银发女骑士",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "characterSignature",
+          "materiallyDifferentiating": true
+        },
+        {
+          "dimension": "hair",
+          "value": "银色",
+          "source": "brief",
+          "specificity": "broad",
+          "pillar": "characterSignature",
+          "materiallyDifferentiating": true,
+          "candidatePolicy": {
+            "allowedCandidateIds": [
+              "image_hair:long_straight",
+              "image_hair:long_wavy",
+              "image_hair:short_bob",
+              "image_hair:pixie_cut",
+              "image_hair:ponytail",
+              "image_hair:braids",
+              "image_hair:bun_updo",
+              "image_hair:messy_tousled",
+              "image_hair:curly_coily"
+            ],
+            "forbiddenCandidateIds": []
+          }
+        },
+        {
+          "dimension": "pose",
+          "value": "正侧背中性展示站姿",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "narrativeBehavior",
+          "materiallyDifferentiating": true
+        },
+        {
+          "dimension": "composition",
+          "value": "正侧背三视图版式",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "visualWorld",
+          "materiallyDifferentiating": true
+        },
+        {
+          "dimension": "camera_angle",
+          "value": "正侧背标准视角",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "visualWorld",
+          "materiallyDifferentiating": true
+        },
+        {
+          "dimension": "scene",
+          "value": "白底",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "visualWorld",
+          "materiallyDifferentiating": false,
+          "knownOptionIds": [
+            "image_scene:white_bg"
+          ]
+        },
+        {
+          "dimension": "character_render_style",
+          "value": "角色设定表",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "presentationPurpose",
+          "materiallyDifferentiating": true,
+          "knownOptionIds": [
+            "image_character_render_style:character_sheet"
+          ]
+        }
+      ],
+      "expectedAction": "ask",
+      "mustNotAskReasons": {
+        "scene": "known_fact",
+        "camera_angle": "known_fact",
+        "composition": "known_fact",
+        "pose": "known_fact",
+        "character_render_style": "known_fact"
+      }
+    },
+    {
+      "id": "couple-invitation",
+      "brief": "情侣订婚照，用于邀请函，自然温暖",
+      "history": [],
+      "mode": "adaptive",
+      "budgetClass": "partial",
+      "acceptableNext": [
+        "character_interaction",
+        "outfit",
+        "scene",
+        "lighting"
+      ],
+      "mustNotAsk": [
+        "use_case"
+      ],
+      "expectedKnownFacts": [
+        {
+          "dimension": "subject",
+          "value": "情侣",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "characterSignature",
+          "materiallyDifferentiating": true
+        },
+        {
+          "dimension": "use_case",
+          "value": "订婚邀请函",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "presentationPurpose",
+          "materiallyDifferentiating": true,
+          "knownOptionIds": [
+            "image_use_case:invitation"
+          ]
+        },
+        {
+          "dimension": "mood",
+          "value": "自然温暖",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "presentationPurpose",
+          "materiallyDifferentiating": true
+        }
+      ],
+      "expectedAction": "ask",
+      "mustNotAskReasons": {
+        "use_case": "known_fact"
+      }
+    },
+    {
+      "id": "novel-cover",
+      "brief": "疲惫的私家侦探，黑色小说封面",
+      "history": [],
+      "mode": "adaptive",
+      "budgetClass": "partial",
+      "acceptableNext": [
+        "person_type",
+        "scene",
+        "lighting",
+        "composition"
+      ],
+      "mustNotAsk": [
+        "use_case",
+        "portrait_expression",
+        "mood"
+      ],
+      "expectedKnownFacts": [
+        {
+          "dimension": "subject",
+          "value": "私家侦探",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "characterSignature",
+          "materiallyDifferentiating": true
+        },
+        {
+          "dimension": "portrait_expression",
+          "value": "疲惫",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "narrativeBehavior",
+          "materiallyDifferentiating": true
+        },
+        {
+          "dimension": "use_case",
+          "value": "黑色小说封面",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "presentationPurpose",
+          "materiallyDifferentiating": true,
+          "knownOptionIds": [
+            "image_use_case:cover_image"
+          ]
+        },
+        {
+          "dimension": "mood",
+          "value": "黑色小说",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "presentationPurpose",
+          "materiallyDifferentiating": true
+        }
+      ],
+      "expectedAction": "ask",
+      "mustNotAskReasons": {
+        "use_case": "known_fact",
+        "portrait_expression": "known_fact",
+        "mood": "known_fact"
+      }
+    },
+    {
+      "id": "explicit-scene",
+      "brief": "二次元女学生坐在教室窗边，午后阳光，看向窗外",
+      "history": [],
+      "mode": "adaptive",
+      "budgetClass": "detailed",
+      "acceptableNext": [
+        "outfit",
+        "framing",
+        "mood",
+        "face_features"
+      ],
+      "mustNotAsk": [
+        "scene",
+        "lighting",
+        "pose",
+        "character_interaction",
+        "art_style"
+      ],
+      "expectedKnownFacts": [
+        {
+          "dimension": "subject",
+          "value": "女学生",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "characterSignature",
+          "materiallyDifferentiating": true
+        },
+        {
+          "dimension": "gender_presentation",
+          "value": "女性",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "characterSignature",
+          "materiallyDifferentiating": true
+        },
+        {
+          "dimension": "pose",
+          "value": "坐着",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "narrativeBehavior",
+          "materiallyDifferentiating": true,
+          "knownOptionIds": [
+            "image_pose:sitting"
+          ]
+        },
+        {
+          "dimension": "character_interaction",
+          "value": "看向窗外",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "narrativeBehavior",
+          "materiallyDifferentiating": true
+        },
+        {
+          "dimension": "scene",
+          "value": "教室窗边",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "visualWorld",
+          "materiallyDifferentiating": true
+        },
+        {
+          "dimension": "lighting",
+          "value": "午后阳光",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "visualWorld",
+          "materiallyDifferentiating": true
+        },
+        {
+          "dimension": "art_style",
+          "value": "二次元",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "presentationPurpose",
+          "materiallyDifferentiating": true,
+          "knownOptionIds": [
+            "image_art_style:anime_manga"
+          ]
+        }
+      ],
+      "expectedAction": "ask",
+      "mustNotAskReasons": {
+        "scene": "known_fact",
+        "lighting": "known_fact",
+        "pose": "known_fact",
+        "character_interaction": "known_fact",
+        "art_style": "known_fact"
+      }
+    },
+    {
+      "id": "detailed-key-visual",
+      "brief": "红发女船长站在暴风雨甲板上，低机位全身，电影感蓝绿色调，用作游戏主视觉",
+      "history": [],
+      "mode": "adaptive",
+      "budgetClass": "partial",
+      "acceptableNext": [
+        "hair",
+        "outfit",
+        "portrait_expression",
+        "art_style"
+      ],
+      "mustNotAsk": [
+        "use_case",
+        "scene",
+        "camera_angle",
+        "framing",
+        "color_palette"
+      ],
+      "expectedKnownFacts": [
+        {
+          "dimension": "subject",
+          "value": "女船长",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "characterSignature",
+          "materiallyDifferentiating": true
+        },
+        {
+          "dimension": "gender_presentation",
+          "value": "女性",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "characterSignature",
+          "materiallyDifferentiating": true
+        },
+        {
+          "dimension": "hair",
+          "value": "红色",
+          "source": "brief",
+          "specificity": "broad",
+          "pillar": "characterSignature",
+          "materiallyDifferentiating": true,
+          "candidatePolicy": {
+            "allowedCandidateIds": [
+              "image_hair:long_straight",
+              "image_hair:long_wavy",
+              "image_hair:short_bob",
+              "image_hair:pixie_cut",
+              "image_hair:ponytail",
+              "image_hair:braids",
+              "image_hair:bun_updo",
+              "image_hair:messy_tousled",
+              "image_hair:curly_coily"
+            ],
+            "forbiddenCandidateIds": []
+          }
+        },
+        {
+          "dimension": "pose",
+          "value": "站立",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "narrativeBehavior",
+          "materiallyDifferentiating": false,
+          "knownOptionIds": [
+            "image_pose:standing"
+          ]
+        },
+        {
+          "dimension": "scene",
+          "value": "暴风雨甲板",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "visualWorld",
+          "materiallyDifferentiating": true
+        },
+        {
+          "dimension": "camera_angle",
+          "value": "低机位",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "visualWorld",
+          "materiallyDifferentiating": true
+        },
+        {
+          "dimension": "framing",
+          "value": "全身",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "visualWorld",
+          "materiallyDifferentiating": true
+        },
+        {
+          "dimension": "use_case",
+          "value": "游戏主视觉",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "presentationPurpose",
+          "materiallyDifferentiating": true
+        },
+        {
+          "dimension": "color_palette",
+          "value": "电影感蓝绿色调",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "presentationPurpose",
+          "materiallyDifferentiating": true
+        }
+      ],
+      "expectedAction": "ask",
+      "mustNotAskReasons": {
+        "use_case": "known_fact",
+        "scene": "known_fact",
+        "camera_angle": "known_fact",
+        "framing": "known_fact",
+        "color_palette": "known_fact"
+      }
+    },
+    {
+      "id": "fully-specified-zero-turn",
+      "brief": "32岁、古铜色自然皮肤、高挑强健、红色长卷发、左眼眼罩和下颌疤痕、无妆感的女船长，穿黑色皮革长外套与金属肩甲，握弯刀怒视镜头，双腿站稳在暴风雨甲板上，低机位 35mm 全身竖版 2:3 海报构图，蓝绿色冷色调电影光效与雨雾，史诗紧张氛围，电影级高细节写实 3D 手游主视觉",
+      "history": [],
+      "mode": "adaptive",
+      "budgetClass": "detailed",
+      "acceptableNext": [],
+      "mustNotAsk": [
+        "use_case",
+        "person_type",
+        "character_archetype",
+        "character_interaction",
+        "gender_presentation",
+        "age_band",
+        "skin_tone",
+        "body_type",
+        "hair",
+        "face_features",
+        "makeup",
+        "outfit",
+        "character_props",
+        "portrait_expression",
+        "pose",
+        "scene",
+        "camera_angle",
+        "camera",
+        "framing",
+        "composition",
+        "aspect_ratio",
+        "lighting",
+        "art_style",
+        "character_render_style",
+        "color_palette",
+        "mood",
+        "detail_level"
+      ],
+      "expectedKnownFacts": [
+        {
+          "dimension": "subject",
+          "value": "女船长",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "characterSignature",
+          "materiallyDifferentiating": true
+        },
+        {
+          "dimension": "person_type",
+          "value": "游戏角色",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "characterSignature",
+          "materiallyDifferentiating": true,
+          "knownOptionIds": [
+            "image_person_type:game_character"
+          ]
+        },
+        {
+          "dimension": "character_archetype",
+          "value": "海盗船长",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "characterSignature",
+          "materiallyDifferentiating": true
+        },
+        {
+          "dimension": "gender_presentation",
+          "value": "女性",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "characterSignature",
+          "materiallyDifferentiating": true,
+          "knownOptionIds": [
+            "image_gender_presentation:feminine"
+          ]
+        },
+        {
+          "dimension": "age_band",
+          "value": "32岁",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "characterSignature",
+          "materiallyDifferentiating": true
+        },
+        {
+          "dimension": "skin_tone",
+          "value": "古铜色自然皮肤",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "characterSignature",
+          "materiallyDifferentiating": true,
+          "knownOptionIds": [
+            "image_skin_tone:golden_tan",
+            "image_skin_tone:natural_texture"
+          ]
+        },
+        {
+          "dimension": "body_type",
+          "value": "高挑强健",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "characterSignature",
+          "materiallyDifferentiating": true
+        },
+        {
+          "dimension": "hair",
+          "value": "红色长卷发",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "characterSignature",
+          "materiallyDifferentiating": true,
+          "knownOptionIds": [
+            "image_hair:long_wavy"
+          ]
+        },
+        {
+          "dimension": "face_features",
+          "value": "左眼眼罩和下颌疤痕",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "characterSignature",
+          "materiallyDifferentiating": true
+        },
+        {
+          "dimension": "makeup",
+          "value": "无妆感",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "characterSignature",
+          "materiallyDifferentiating": true
+        },
+        {
+          "dimension": "outfit",
+          "value": "黑色皮革长外套与金属肩甲",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "characterSignature",
+          "materiallyDifferentiating": true
+        },
+        {
+          "dimension": "character_props",
+          "value": "弯刀",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "characterSignature",
+          "materiallyDifferentiating": true,
+          "knownOptionIds": [
+            "image_character_props:sword"
+          ]
+        },
+        {
+          "dimension": "portrait_expression",
+          "value": "怒视镜头",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "narrativeBehavior",
+          "materiallyDifferentiating": true
+        },
+        {
+          "dimension": "pose",
+          "value": "双腿站稳并握刀",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "narrativeBehavior",
+          "materiallyDifferentiating": true
+        },
+        {
+          "dimension": "scene",
+          "value": "暴风雨甲板与雨雾",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "visualWorld",
+          "materiallyDifferentiating": true
+        },
+        {
+          "dimension": "camera_angle",
+          "value": "低机位",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "visualWorld",
+          "materiallyDifferentiating": true
+        },
+        {
+          "dimension": "camera",
+          "value": "35mm 广角",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "visualWorld",
+          "materiallyDifferentiating": true,
+          "knownOptionIds": [
+            "image_camera:35mm_wide"
+          ]
+        },
+        {
+          "dimension": "framing",
+          "value": "全身",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "visualWorld",
+          "materiallyDifferentiating": true
+        },
+        {
+          "dimension": "composition",
+          "value": "海报构图",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "visualWorld",
+          "materiallyDifferentiating": true
+        },
+        {
+          "dimension": "aspect_ratio",
+          "value": "竖版 2:3",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "visualWorld",
+          "materiallyDifferentiating": true,
+          "knownOptionIds": [
+            "image_aspect_ratio:portrait_2_3"
+          ]
+        },
+        {
+          "dimension": "lighting",
+          "value": "蓝绿色电影光效",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "visualWorld",
+          "materiallyDifferentiating": true
+        },
+        {
+          "dimension": "color_palette",
+          "value": "蓝绿色冷色调",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "presentationPurpose",
+          "materiallyDifferentiating": true,
+          "knownOptionIds": [
+            "image_color_palette:cool",
+            "image_color_palette:ocean_blue"
+          ]
+        },
+        {
+          "dimension": "art_style",
+          "value": "写实 3D",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "presentationPurpose",
+          "materiallyDifferentiating": true,
+          "knownOptionIds": [
+            "image_art_style:3d_render"
+          ]
+        },
+        {
+          "dimension": "character_render_style",
+          "value": "手游主视觉",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "presentationPurpose",
+          "materiallyDifferentiating": true,
+          "knownOptionIds": [
+            "image_character_render_style:gacha_splash_art"
+          ]
+        },
+        {
+          "dimension": "mood",
+          "value": "史诗紧张氛围",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "presentationPurpose",
+          "materiallyDifferentiating": true,
+          "knownOptionIds": [
+            "image_mood:epic_grand",
+            "image_mood:dynamic_tense"
+          ]
+        },
+        {
+          "dimension": "detail_level",
+          "value": "电影级高细节",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "presentationPurpose",
+          "materiallyDifferentiating": true,
+          "knownOptionIds": [
+            "image_detail_level:cinematic_quality",
+            "image_detail_level:high_detail"
+          ]
+        },
+        {
+          "dimension": "use_case",
+          "value": "手游主视觉",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "presentationPurpose",
+          "materiallyDifferentiating": true
+        }
+      ],
+      "expectedAction": "complete",
+      "mustNotAskReasons": {
+        "use_case": "known_fact",
+        "person_type": "known_fact",
+        "character_archetype": "known_fact",
+        "character_interaction": "irrelevant",
+        "gender_presentation": "known_fact",
+        "age_band": "known_fact",
+        "skin_tone": "known_fact",
+        "body_type": "known_fact",
+        "hair": "known_fact",
+        "face_features": "known_fact",
+        "makeup": "known_fact",
+        "outfit": "known_fact",
+        "character_props": "known_fact",
+        "portrait_expression": "known_fact",
+        "pose": "known_fact",
+        "scene": "known_fact",
+        "camera_angle": "known_fact",
+        "camera": "known_fact",
+        "framing": "known_fact",
+        "composition": "known_fact",
+        "aspect_ratio": "known_fact",
+        "lighting": "known_fact",
+        "art_style": "known_fact",
+        "character_render_style": "known_fact",
+        "color_palette": "known_fact",
+        "mood": "known_fact",
+        "detail_level": "known_fact"
+      }
+    },
+    {
+      "id": "company-team",
+      "brief": "公司管理团队官网合影，正式但亲和",
+      "history": [],
+      "mode": "adaptive",
+      "budgetClass": "partial",
+      "acceptableNext": [
+        "framing",
+        "outfit",
+        "scene",
+        "lighting"
+      ],
+      "mustNotAsk": [
+        "use_case"
+      ],
+      "expectedKnownFacts": [
+        {
+          "dimension": "subject",
+          "value": "公司管理团队",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "characterSignature",
+          "materiallyDifferentiating": true
+        },
+        {
+          "dimension": "use_case",
+          "value": "官网合影",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "presentationPurpose",
+          "materiallyDifferentiating": true
+        },
+        {
+          "dimension": "mood",
+          "value": "正式但亲和",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "presentationPurpose",
+          "materiallyDifferentiating": true
+        }
+      ],
+      "expectedAction": "ask",
+      "mustNotAskReasons": {
+        "use_case": "known_fact"
+      }
+    },
+    {
+      "id": "anime-snowstorm",
+      "brief": "动画主视觉：英雄们冲过暴风雪，强烈速度感",
+      "history": [],
+      "mode": "adaptive",
+      "budgetClass": "detailed",
+      "acceptableNext": [
+        "framing",
+        "camera_angle",
+        "lighting",
+        "outfit"
+      ],
+      "mustNotAsk": [
+        "scene",
+        "pose",
+        "use_case",
+        "character_render_style"
+      ],
+      "expectedKnownFacts": [
+        {
+          "dimension": "subject",
+          "value": "英雄群像",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "characterSignature",
+          "materiallyDifferentiating": true
+        },
+        {
+          "dimension": "pose",
+          "value": "冲过暴风雪",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "narrativeBehavior",
+          "materiallyDifferentiating": true
+        },
+        {
+          "dimension": "scene",
+          "value": "暴风雪",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "visualWorld",
+          "materiallyDifferentiating": true,
+          "knownOptionIds": [
+            "image_scene:snow_scene"
+          ]
+        },
+        {
+          "dimension": "use_case",
+          "value": "动画主视觉",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "presentationPurpose",
+          "materiallyDifferentiating": true
+        },
+        {
+          "dimension": "character_render_style",
+          "value": "动画主视觉",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "presentationPurpose",
+          "materiallyDifferentiating": true,
+          "knownOptionIds": [
+            "image_character_render_style:anime_key_visual"
+          ]
+        },
+        {
+          "dimension": "mood",
+          "value": "强烈速度感",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "presentationPurpose",
+          "materiallyDifferentiating": true
+        }
+      ],
+      "expectedAction": "ask",
+      "mustNotAskReasons": {
+        "scene": "known_fact",
+        "pose": "known_fact",
+        "use_case": "known_fact",
+        "character_render_style": "known_fact"
+      }
+    },
+    {
+      "id": "fantasy-elf",
+      "brief": "月光下的精灵弓手站在魔法森林里",
+      "history": [],
+      "mode": "adaptive",
+      "budgetClass": "partial",
+      "acceptableNext": [
+        "portrait_expression",
+        "character_render_style",
+        "art_style",
+        "mood"
+      ],
+      "mustNotAsk": [
+        "scene",
+        "lighting",
+        "character_props",
+        "pose"
+      ],
+      "expectedKnownFacts": [
+        {
+          "dimension": "subject",
+          "value": "精灵弓手",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "characterSignature",
+          "materiallyDifferentiating": true
+        },
+        {
+          "dimension": "character_props",
+          "value": "弓",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "characterSignature",
+          "materiallyDifferentiating": true
+        },
+        {
+          "dimension": "pose",
+          "value": "站立",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "narrativeBehavior",
+          "materiallyDifferentiating": false,
+          "knownOptionIds": [
+            "image_pose:standing"
+          ]
+        },
+        {
+          "dimension": "scene",
+          "value": "魔法森林",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "visualWorld",
+          "materiallyDifferentiating": true
+        },
+        {
+          "dimension": "lighting",
+          "value": "月光",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "visualWorld",
+          "materiallyDifferentiating": true,
+          "knownOptionIds": [
+            "image_lighting:moonlight"
+          ]
+        }
+      ],
+      "expectedAction": "ask",
+      "mustNotAskReasons": {
+        "scene": "known_fact",
+        "lighting": "known_fact",
+        "character_props": "known_fact",
+        "pose": "known_fact"
+      }
+    },
+    {
+      "id": "social-avatar",
+      "brief": "时尚男模社交媒体头像，近距离裁切，极简高级",
+      "history": [],
+      "mode": "adaptive",
+      "budgetClass": "partial",
+      "acceptableNext": [
+        "face_features",
+        "hair",
+        "outfit",
+        "portrait_expression"
+      ],
+      "mustNotAsk": [
+        "use_case",
+        "framing",
+        "scene",
+        "gender_presentation"
+      ],
+      "expectedKnownFacts": [
+        {
+          "dimension": "subject",
+          "value": "时尚男模",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "characterSignature",
+          "materiallyDifferentiating": true
+        },
+        {
+          "dimension": "gender_presentation",
+          "value": "男性",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "characterSignature",
+          "materiallyDifferentiating": true,
+          "knownOptionIds": [
+            "image_gender_presentation:masculine"
+          ]
+        },
+        {
+          "dimension": "use_case",
+          "value": "社交媒体头像",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "presentationPurpose",
+          "materiallyDifferentiating": true,
+          "knownOptionIds": [
+            "image_use_case:avatar"
+          ]
+        },
+        {
+          "dimension": "framing",
+          "value": "近距离裁切",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "visualWorld",
+          "materiallyDifferentiating": true,
+          "knownOptionIds": [
+            "image_framing:close_up"
+          ]
+        },
+        {
+          "dimension": "mood",
+          "value": "极简高级",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "presentationPurpose",
+          "materiallyDifferentiating": true
+        }
+      ],
+      "expectedAction": "ask",
+      "mustNotAskReasons": {
+        "use_case": "known_fact",
+        "framing": "known_fact",
+        "scene": "irrelevant",
+        "gender_presentation": "known_fact"
+      }
+    },
+    {
+      "id": "formally-complete-generic",
+      "brief": "一个人，站着，白底，社交头像",
+      "history": [],
+      "mode": "adaptive",
+      "budgetClass": "sparse",
+      "acceptableNext": [
+        "person_type",
+        "face_features",
+        "hair",
+        "art_style"
+      ],
+      "mustNotAsk": [
+        "scene",
+        "pose",
+        "use_case"
+      ],
+      "expectedKnownFacts": [
+        {
+          "dimension": "subject",
+          "value": "一个人",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "characterSignature",
+          "materiallyDifferentiating": false
+        },
+        {
+          "dimension": "pose",
+          "value": "站立",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "narrativeBehavior",
+          "materiallyDifferentiating": false,
+          "knownOptionIds": [
+            "image_pose:standing"
+          ]
+        },
+        {
+          "dimension": "scene",
+          "value": "白底",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "visualWorld",
+          "materiallyDifferentiating": false,
+          "knownOptionIds": [
+            "image_scene:white_bg"
+          ]
+        },
+        {
+          "dimension": "use_case",
+          "value": "社交头像",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "presentationPurpose",
+          "materiallyDifferentiating": false,
+          "knownOptionIds": [
+            "image_use_case:avatar"
+          ]
+        }
+      ],
+      "expectedAction": "ask",
+      "mustNotAskReasons": {
+        "scene": "known_fact",
+        "pose": "known_fact",
+        "use_case": "known_fact"
+      }
+    },
+    {
+      "id": "business-portrait-after-use-case",
+      "brief": "职业女性肖像，干练但亲和",
+      "history": [
+        {
+          "questionId": "use_case",
+          "selectedOptionIds": [
+            "image_use_case:avatar"
+          ]
+        }
+      ],
+      "mode": "adaptive",
+      "acceptableNext": [
+        "framing",
+        "outfit",
+        "portrait_expression",
+        "lighting"
+      ],
+      "mustNotAsk": [
+        "use_case",
+        "gender_presentation",
+        "mood"
+      ],
+      "expectedKnownFacts": [
+        {
+          "dimension": "subject",
+          "value": "职业女性",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "characterSignature",
+          "materiallyDifferentiating": true
+        },
+        {
+          "dimension": "gender_presentation",
+          "value": "女性",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "characterSignature",
+          "materiallyDifferentiating": true
+        },
+        {
+          "dimension": "mood",
+          "value": "干练但亲和",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "presentationPurpose",
+          "materiallyDifferentiating": true
+        },
+        {
+          "dimension": "use_case",
+          "value": "头像",
+          "source": "history",
+          "specificity": "exact",
+          "pillar": "presentationPurpose",
+          "materiallyDifferentiating": true,
+          "knownOptionIds": [
+            "image_use_case:avatar"
+          ]
+        }
+      ],
+      "expectedAction": "ask",
+      "budgetClass": "partial",
+      "mustNotAskReasons": {
+        "use_case": "known_fact",
+        "gender_presentation": "known_fact",
+        "mood": "known_fact"
+      }
+    },
+    {
+      "id": "sparse-budget-last-turn",
+      "brief": "原创游侠角色",
+      "history": [
+        {
+          "questionId": "person_type",
+          "selectedOptionIds": [
+            "image_person_type:game_character"
+          ]
+        },
+        {
+          "questionId": "gender_presentation",
+          "selectedOptionIds": [
+            "image_gender_presentation:feminine"
+          ]
+        },
+        {
+          "questionId": "age_band",
+          "selectedOptionIds": [
+            "image_age_band:young_adult"
+          ]
+        },
+        {
+          "questionId": "hair",
+          "selectedOptionIds": [
+            "image_hair:ponytail"
+          ]
+        },
+        {
+          "questionId": "outfit",
+          "selectedOptionIds": [],
+          "freeText": "墨绿色游侠斗篷配银色肩甲"
+        },
+        {
+          "questionId": "character_props",
+          "selectedOptionIds": [
+            "image_character_props:sword"
+          ]
+        },
+        {
+          "questionId": "portrait_expression",
+          "selectedOptionIds": [
+            "image_portrait_expression:intense"
+          ]
+        },
+        {
+          "questionId": "pose",
+          "selectedOptionIds": [
+            "image_pose:looking_back"
+          ]
+        },
+        {
+          "questionId": "art_style",
+          "selectedOptionIds": [
+            "image_art_style:digital_painting"
+          ]
+        }
+      ],
+      "mode": "adaptive",
+      "acceptableNext": [
+        "scene",
+        "lighting"
+      ],
+      "mustNotAsk": [
+        "person_type",
+        "gender_presentation",
+        "age_band",
+        "hair",
+        "outfit",
+        "character_props",
+        "portrait_expression",
+        "pose",
+        "art_style"
+      ],
+      "expectedKnownFacts": [
+        {
+          "dimension": "subject",
+          "value": "原创游侠角色",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "characterSignature",
+          "materiallyDifferentiating": true
+        },
+        {
+          "dimension": "person_type",
+          "value": "游戏角色",
+          "source": "history",
+          "specificity": "exact",
+          "pillar": "characterSignature",
+          "materiallyDifferentiating": true,
+          "knownOptionIds": [
+            "image_person_type:game_character"
+          ]
+        },
+        {
+          "dimension": "gender_presentation",
+          "value": "女性",
+          "source": "history",
+          "specificity": "exact",
+          "pillar": "characterSignature",
+          "materiallyDifferentiating": true,
+          "knownOptionIds": [
+            "image_gender_presentation:feminine"
+          ]
+        },
+        {
+          "dimension": "age_band",
+          "value": "青年",
+          "source": "history",
+          "specificity": "exact",
+          "pillar": "characterSignature",
+          "materiallyDifferentiating": true,
+          "knownOptionIds": [
+            "image_age_band:young_adult"
+          ]
+        },
+        {
+          "dimension": "hair",
+          "value": "马尾",
+          "source": "history",
+          "specificity": "exact",
+          "pillar": "characterSignature",
+          "materiallyDifferentiating": true,
+          "knownOptionIds": [
+            "image_hair:ponytail"
+          ]
+        },
+        {
+          "dimension": "outfit",
+          "value": "墨绿色游侠斗篷配银色肩甲",
+          "source": "history",
+          "specificity": "exact",
+          "pillar": "characterSignature",
+          "materiallyDifferentiating": true
+        },
+        {
+          "dimension": "character_props",
+          "value": "剑",
+          "source": "history",
+          "specificity": "exact",
+          "pillar": "characterSignature",
+          "materiallyDifferentiating": true,
+          "knownOptionIds": [
+            "image_character_props:sword"
+          ]
+        },
+        {
+          "dimension": "portrait_expression",
+          "value": "强烈锐利",
+          "source": "history",
+          "specificity": "exact",
+          "pillar": "narrativeBehavior",
+          "materiallyDifferentiating": true,
+          "knownOptionIds": [
+            "image_portrait_expression:intense"
+          ]
+        },
+        {
+          "dimension": "pose",
+          "value": "回头",
+          "source": "history",
+          "specificity": "exact",
+          "pillar": "narrativeBehavior",
+          "materiallyDifferentiating": true,
+          "knownOptionIds": [
+            "image_pose:looking_back"
+          ]
+        },
+        {
+          "dimension": "art_style",
+          "value": "数字绘画",
+          "source": "history",
+          "specificity": "exact",
+          "pillar": "presentationPurpose",
+          "materiallyDifferentiating": true,
+          "knownOptionIds": [
+            "image_art_style:digital_painting"
+          ]
+        }
+      ],
+      "expectedAction": "ask",
+      "budgetClass": "sparse",
+      "mustNotAskReasons": {
+        "person_type": "known_fact",
+        "gender_presentation": "known_fact",
+        "age_band": "known_fact",
+        "hair": "known_fact",
+        "outfit": "known_fact",
+        "character_props": "known_fact",
+        "portrait_expression": "known_fact",
+        "pose": "known_fact",
+        "art_style": "known_fact"
+      }
+    },
+    {
+      "id": "partial-budget-complete",
+      "brief": "32岁、利落齐耳短发、自然皮肤质感、无妆感的职业女性品牌头像，干练亲和；1:1 方形，平视 85mm 浅景深居中构图，冷灰蓝低饱和，高精细真人质感",
+      "history": [
+        {
+          "questionId": "face_features",
+          "selectedOptionIds": [
+            "image_face_features:defined_jawline",
+            "image_face_features:bright_clear_eyes"
+          ]
+        },
+        {
+          "questionId": "outfit",
+          "selectedOptionIds": [
+            "image_outfit:formal_suit"
+          ]
+        },
+        {
+          "questionId": "portrait_expression",
+          "selectedOptionIds": [
+            "image_portrait_expression:confident"
+          ]
+        },
+        {
+          "questionId": "framing",
+          "selectedOptionIds": [
+            "image_framing:close_up"
+          ]
+        },
+        {
+          "questionId": "lighting",
+          "selectedOptionIds": [
+            "image_lighting:butterfly"
+          ]
+        },
+        {
+          "questionId": "scene",
+          "selectedOptionIds": [
+            "image_scene:gradient_bg"
+          ]
+        },
+        {
+          "questionId": "art_style",
+          "selectedOptionIds": [
+            "image_art_style:portrait_photography"
+          ]
+        }
+      ],
+      "mode": "adaptive",
+      "acceptableNext": [],
+      "mustNotAsk": [
+        "use_case",
+        "person_type",
+        "character_archetype",
+        "character_interaction",
+        "gender_presentation",
+        "age_band",
+        "skin_tone",
+        "hair",
+        "makeup",
+        "face_features",
+        "body_type",
+        "outfit",
+        "character_props",
+        "portrait_expression",
+        "pose",
+        "framing",
+        "camera_angle",
+        "camera",
+        "composition",
+        "aspect_ratio",
+        "lighting",
+        "scene",
+        "art_style",
+        "character_render_style",
+        "color_palette",
+        "mood",
+        "detail_level"
+      ],
+      "expectedKnownFacts": [
+        {
+          "dimension": "subject",
+          "value": "32岁职业女性",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "characterSignature",
+          "materiallyDifferentiating": true
+        },
+        {
+          "dimension": "gender_presentation",
+          "value": "女性",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "characterSignature",
+          "materiallyDifferentiating": true,
+          "knownOptionIds": [
+            "image_gender_presentation:feminine"
+          ]
+        },
+        {
+          "dimension": "age_band",
+          "value": "32岁",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "characterSignature",
+          "materiallyDifferentiating": true
+        },
+        {
+          "dimension": "skin_tone",
+          "value": "自然皮肤质感",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "characterSignature",
+          "materiallyDifferentiating": true,
+          "knownOptionIds": [
+            "image_skin_tone:natural_texture"
+          ]
+        },
+        {
+          "dimension": "hair",
+          "value": "利落齐耳短发",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "characterSignature",
+          "materiallyDifferentiating": true,
+          "knownOptionIds": [
+            "image_hair:short_bob"
+          ]
+        },
+        {
+          "dimension": "makeup",
+          "value": "无妆感",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "characterSignature",
+          "materiallyDifferentiating": true
+        },
+        {
+          "dimension": "use_case",
+          "value": "品牌头像",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "presentationPurpose",
+          "materiallyDifferentiating": true,
+          "knownOptionIds": [
+            "image_use_case:avatar"
+          ]
+        },
+        {
+          "dimension": "mood",
+          "value": "干练亲和",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "presentationPurpose",
+          "materiallyDifferentiating": true
+        },
+        {
+          "dimension": "camera_angle",
+          "value": "平视",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "visualWorld",
+          "materiallyDifferentiating": true,
+          "knownOptionIds": [
+            "image_camera_angle:eye_level"
+          ]
+        },
+        {
+          "dimension": "camera",
+          "value": "85mm 浅景深",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "visualWorld",
+          "materiallyDifferentiating": true,
+          "knownOptionIds": [
+            "image_camera:85mm_portrait",
+            "image_camera:wide_aperture_bokeh"
+          ]
+        },
+        {
+          "dimension": "composition",
+          "value": "居中构图",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "visualWorld",
+          "materiallyDifferentiating": true,
+          "knownOptionIds": [
+            "image_composition:centered"
+          ]
+        },
+        {
+          "dimension": "aspect_ratio",
+          "value": "1:1 方形",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "visualWorld",
+          "materiallyDifferentiating": true,
+          "knownOptionIds": [
+            "image_aspect_ratio:square_1_1"
+          ]
+        },
+        {
+          "dimension": "character_render_style",
+          "value": "真人质感",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "presentationPurpose",
+          "materiallyDifferentiating": true,
+          "knownOptionIds": [
+            "image_character_render_style:realistic_portrait"
+          ]
+        },
+        {
+          "dimension": "color_palette",
+          "value": "冷灰蓝低饱和",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "presentationPurpose",
+          "materiallyDifferentiating": true,
+          "knownOptionIds": [
+            "image_color_palette:cool",
+            "image_color_palette:sophisticated_gray",
+            "image_color_palette:muted"
+          ]
+        },
+        {
+          "dimension": "detail_level",
+          "value": "高精细",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "presentationPurpose",
+          "materiallyDifferentiating": true,
+          "knownOptionIds": [
+            "image_detail_level:high_detail",
+            "image_detail_level:sharp_clean"
+          ]
+        },
+        {
+          "dimension": "face_features",
+          "value": "清晰下颌线与明亮眼神",
+          "source": "history",
+          "specificity": "exact",
+          "pillar": "characterSignature",
+          "materiallyDifferentiating": true,
+          "knownOptionIds": [
+            "image_face_features:defined_jawline",
+            "image_face_features:bright_clear_eyes"
+          ]
+        },
+        {
+          "dimension": "outfit",
+          "value": "正式西装",
+          "source": "history",
+          "specificity": "exact",
+          "pillar": "characterSignature",
+          "materiallyDifferentiating": true,
+          "knownOptionIds": [
+            "image_outfit:formal_suit"
+          ]
+        },
+        {
+          "dimension": "portrait_expression",
+          "value": "自信",
+          "source": "history",
+          "specificity": "exact",
+          "pillar": "narrativeBehavior",
+          "materiallyDifferentiating": true,
+          "knownOptionIds": [
+            "image_portrait_expression:confident"
+          ]
+        },
+        {
+          "dimension": "framing",
+          "value": "特写",
+          "source": "history",
+          "specificity": "exact",
+          "pillar": "visualWorld",
+          "materiallyDifferentiating": true,
+          "knownOptionIds": [
+            "image_framing:close_up"
+          ]
+        },
+        {
+          "dimension": "lighting",
+          "value": "蝴蝶光",
+          "source": "history",
+          "specificity": "exact",
+          "pillar": "visualWorld",
+          "materiallyDifferentiating": true,
+          "knownOptionIds": [
+            "image_lighting:butterfly"
+          ]
+        },
+        {
+          "dimension": "scene",
+          "value": "渐变背景",
+          "source": "history",
+          "specificity": "exact",
+          "pillar": "visualWorld",
+          "materiallyDifferentiating": true,
+          "knownOptionIds": [
+            "image_scene:gradient_bg"
+          ]
+        },
+        {
+          "dimension": "art_style",
+          "value": "人像摄影",
+          "source": "history",
+          "specificity": "exact",
+          "pillar": "presentationPurpose",
+          "materiallyDifferentiating": true,
+          "knownOptionIds": [
+            "image_art_style:portrait_photography"
+          ]
+        }
+      ],
+      "expectedAction": "complete",
+      "budgetClass": "partial",
+      "mustNotAskReasons": {
+        "use_case": "known_fact",
+        "person_type": "irrelevant",
+        "character_archetype": "irrelevant",
+        "character_interaction": "irrelevant",
+        "gender_presentation": "known_fact",
+        "age_band": "known_fact",
+        "skin_tone": "known_fact",
+        "hair": "known_fact",
+        "makeup": "known_fact",
+        "face_features": "known_fact",
+        "body_type": "irrelevant",
+        "outfit": "known_fact",
+        "character_props": "irrelevant",
+        "portrait_expression": "known_fact",
+        "pose": "irrelevant",
+        "framing": "known_fact",
+        "camera_angle": "known_fact",
+        "camera": "known_fact",
+        "composition": "known_fact",
+        "aspect_ratio": "known_fact",
+        "lighting": "known_fact",
+        "scene": "known_fact",
+        "art_style": "known_fact",
+        "character_render_style": "known_fact",
+        "color_palette": "known_fact",
+        "mood": "known_fact",
+        "detail_level": "known_fact"
+      }
+    },
+    {
+      "id": "detailed-budget-last-turn",
+      "brief": "红发女特工从雨夜霓虹巷中奔向镜头，紧张感电影海报",
+      "history": [
+        {
+          "questionId": "hair",
+          "selectedOptionIds": [
+            "image_hair:short_bob"
+          ]
+        },
+        {
+          "questionId": "outfit",
+          "selectedOptionIds": [
+            "image_outfit:formal_suit"
+          ]
+        },
+        {
+          "questionId": "art_style",
+          "selectedOptionIds": [
+            "image_art_style:photorealistic"
+          ]
+        }
+      ],
+      "mode": "adaptive",
+      "acceptableNext": [
+        "framing",
+        "camera_angle",
+        "portrait_expression",
+        "face_features"
+      ],
+      "mustNotAsk": [
+        "gender_presentation",
+        "hair",
+        "outfit",
+        "pose",
+        "scene",
+        "use_case",
+        "art_style",
+        "mood"
+      ],
+      "expectedKnownFacts": [
+        {
+          "dimension": "subject",
+          "value": "女特工",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "characterSignature",
+          "materiallyDifferentiating": true
+        },
+        {
+          "dimension": "gender_presentation",
+          "value": "女性",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "characterSignature",
+          "materiallyDifferentiating": true,
+          "knownOptionIds": [
+            "image_gender_presentation:feminine"
+          ]
+        },
+        {
+          "dimension": "hair",
+          "value": "红色",
+          "source": "brief",
+          "specificity": "broad",
+          "pillar": "characterSignature",
+          "materiallyDifferentiating": true,
+          "candidatePolicy": {
+            "allowedCandidateIds": [
+              "image_hair:long_straight",
+              "image_hair:long_wavy",
+              "image_hair:short_bob",
+              "image_hair:pixie_cut",
+              "image_hair:ponytail",
+              "image_hair:braids",
+              "image_hair:bun_updo",
+              "image_hair:messy_tousled",
+              "image_hair:curly_coily"
+            ],
+            "forbiddenCandidateIds": []
+          }
+        },
+        {
+          "dimension": "pose",
+          "value": "奔向镜头",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "narrativeBehavior",
+          "materiallyDifferentiating": true
+        },
+        {
+          "dimension": "scene",
+          "value": "雨夜霓虹巷",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "visualWorld",
+          "materiallyDifferentiating": true
+        },
+        {
+          "dimension": "use_case",
+          "value": "电影海报",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "presentationPurpose",
+          "materiallyDifferentiating": true,
+          "knownOptionIds": [
+            "image_use_case:poster"
+          ]
+        },
+        {
+          "dimension": "mood",
+          "value": "紧张感",
+          "source": "brief",
+          "specificity": "exact",
+          "pillar": "presentationPurpose",
+          "materiallyDifferentiating": true
+        },
+        {
+          "dimension": "hair",
+          "value": "短波波头",
+          "source": "history",
+          "specificity": "exact",
+          "pillar": "characterSignature",
+          "materiallyDifferentiating": true,
+          "knownOptionIds": [
+            "image_hair:short_bob"
+          ]
+        },
+        {
+          "dimension": "outfit",
+          "value": "正式西装",
+          "source": "history",
+          "specificity": "exact",
+          "pillar": "characterSignature",
+          "materiallyDifferentiating": true,
+          "knownOptionIds": [
+            "image_outfit:formal_suit"
+          ]
+        },
+        {
+          "dimension": "art_style",
+          "value": "照片级写实",
+          "source": "history",
+          "specificity": "exact",
+          "pillar": "presentationPurpose",
+          "materiallyDifferentiating": true,
+          "knownOptionIds": [
+            "image_art_style:photorealistic"
+          ]
+        }
+      ],
+      "expectedAction": "ask",
+      "budgetClass": "detailed",
+      "mustNotAskReasons": {
+        "gender_presentation": "known_fact",
+        "hair": "known_fact",
+        "outfit": "known_fact",
+        "pose": "known_fact",
+        "scene": "known_fact",
+        "use_case": "known_fact",
+        "art_style": "known_fact",
+        "mood": "known_fact"
+      }
+    }
+  ]
+}
