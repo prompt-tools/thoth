@@ -28,15 +28,12 @@ export interface ProviderPreset {
 export const PROVIDER_PRESETS: ProviderPreset[] = [
   {
     id: "deepseek",
-    // `deepseek-chat` is the only model id the DeepSeek API accepts; it is a
-    // pointer that currently resolves server-side to DeepSeek V4-flash. We keep
-    // sending "deepseek-chat" (sending "deepseek-v4-flash" 400s) but label the
-    // real model for clarity in the UI + eval config/dir.
-    label: "DeepSeek (deepseek-chat = V4-flash)",
+    label: "DeepSeek V4-flash",
     format: "openai",
     baseURL: "https://api.deepseek.com",
-    routingModel: "deepseek-chat",
-    polishModel: "deepseek-chat",
+    routingModel: "deepseek-v4-flash",
+    polishModel: "deepseek-v4-flash",
+    extraBody: { thinking: { type: "disabled" } },
   },
   {
     id: "mimo",

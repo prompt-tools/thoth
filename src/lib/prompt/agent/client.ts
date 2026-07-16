@@ -318,7 +318,7 @@ export function parseTurnResponse(
   const requested = Array.isArray((rawInput as { visibleOptionIds?: unknown })?.visibleOptionIds)
     ? ((rawInput as { visibleOptionIds: unknown[] }).visibleOptionIds as unknown[])
     : [];
-  const validIds = ctx.optionIdsByQuestion.get(ctx.currentQuestionId) ?? new Set();
+  const validIds = new Set(ctx.filteredCurrentOptionIds);
   const validOptionIds = requested.filter(
     (id): id is string => typeof id === "string" && validIds.has(id)
   );
@@ -616,6 +616,7 @@ export async function autoFillDimensions(
 
     // Build manifest lookup
     const manifestMap = new Map(manifest.map((d) => [d.questionId, d]));
+    const allowedFillSet = new Set(fillSet);
 
     // Filter each fill dimension's options against accumulated conflicts
     const dimPayloads: Array<{
@@ -723,6 +724,7 @@ export async function autoFillDimensions(
 
       for (const pick of rawInput.picks as Array<{ questionId?: unknown; optionIds?: unknown }>) {
         if (typeof pick.questionId !== "string" || !Array.isArray(pick.optionIds)) continue;
+        if (!allowedFillSet.has(pick.questionId)) continue;
         if (seen.has(pick.questionId)) continue;
         seen.add(pick.questionId);
 

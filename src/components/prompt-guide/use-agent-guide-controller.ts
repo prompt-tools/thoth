@@ -12,7 +12,7 @@ import { DEFAULT_PROVIDER_ID, getProvider } from "@/lib/prompt/agent/providers";
 import { suggestedIdsFor } from "@/lib/prompt/agent/audit-model";
 import { resolveVisibleOptions } from "@/lib/prompt/agent/options-resolver";
 import { appendAnswer, selectionValueFor, buildRenderInputs, withInferredSubject } from "@/lib/prompt/agent/history";
-import { logAgent, getAgentLog } from "@/lib/prompt/agent/debug-log";
+import { clearAgentLog, logAgent, getAgentLog } from "@/lib/prompt/agent/debug-log";
 import { routePrimaryType, suggestedIdsFromDescription, inferSubjectOptionIds } from "@/lib/prompt/agent/routing";
 import type { Precision } from "@/lib/prompt/agent/gradient";
 import { computeFillSet } from "@/lib/prompt/agent/fill";
@@ -134,6 +134,7 @@ export function useAgentGuideController() {
   const [decision, setDecision] = useState<AgentDecision | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [telemetryEnabled, setTelemetryEnabled] = useState(false);
 
   // A5: track which dimensions were auto-filled (for Pass B UI)
   const [autoFilledQuestionIds, setAutoFilledQuestionIds] = useState<Set<string>>(new Set());
@@ -162,7 +163,7 @@ export function useAgentGuideController() {
    *  + user selections + auto-fills + final prompt) to /api/telemetry → Langfuse. Uses
    *  sendBeacon so it survives page unload (captures abandonment). Never throws. */
   const flushTelemetry = useCallback((endedReason: string, finalPrompt?: { zh: string; en: string }) => {
-    if (!sessionIdRef.current) return;
+    if (!telemetryEnabled || !sessionIdRef.current) return;
     try {
       const body = JSON.stringify({
         sessionId: sessionIdRef.current,
@@ -181,7 +182,7 @@ export function useAgentGuideController() {
     } catch {
       /* telemetry must never break the user's flow */
     }
-  }, []);
+  }, [telemetryEnabled]);
 
   // Hydrate provider/key from localStorage once, after mount. Keeping this out
   // of the initial useState avoids the SSR hydration mismatch; the gate may
@@ -267,6 +268,7 @@ export function useAgentGuideController() {
       const mySession = ++sessionRef.current;
       setLoading(true);
       setError(null);
+      setDecision(null);
 
       // H3: browser-side safety ceiling
       if (nextHistory.length >= H3_MAX_TURNS) {
@@ -385,6 +387,7 @@ export function useAgentGuideController() {
       descriptionRef.current = "";
       setPrecision("simple");
       setAutoFilledQuestionIds(new Set());
+      setTelemetryEnabled(false);
       precisionRef.current = "simple";
       sessionRef.current++; // void any in-flight fetch from a prior session
       consecutiveFallbackRef.current = 0;
@@ -410,6 +413,7 @@ export function useAgentGuideController() {
       setPolished(null);
       setError(null);
       setAutoFilledQuestionIds(new Set());
+      clearAgentLog();
       sessionIdRef.current = (typeof crypto !== "undefined" && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now());
       logAgent("describe", { text: text.trim() || "(空，直接开始)", primaryType: routePrimaryType(text) });
       setPhase("asking");
@@ -590,6 +594,7 @@ export function useAgentGuideController() {
     setPrecision("simple");
     precisionRef.current = "simple";
     setAutoFilledQuestionIds(new Set());
+    setTelemetryEnabled(false);
     sessionRef.current++; // void any in-flight fetch
     consecutiveFallbackRef.current = 0;
     logAgent("restart");
@@ -632,6 +637,8 @@ export function useAgentGuideController() {
     precision,
     setPrecision: (p: Precision) => { precisionRef.current = p; setPrecision(p); },
     primaryType,
+    telemetryEnabled,
+    setTelemetryEnabled,
     builtinDemo: BUILTIN_DEMO,
     readKeyFor: (id: string) => readStorage(keyStorageFor(id)),
     saveKeyAndStart,

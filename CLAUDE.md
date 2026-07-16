@@ -2,19 +2,19 @@
 
 ## Project / 项目
 
-An **image-only** prompt wizard. A lightweight AI agent decides which question to
-ask next based on what the user has already chosen, narrowing the option catalog
-each turn; the final prompt is **deterministically stitched** from the selected
+An **image-only** prompt wizard. Portrait rules decide which question to ask next
+based on what the user has already chosen, while a lightweight AI agent narrows
+that question's option catalog; the final prompt is **deterministically stitched** from the selected
 options (no AI rewriting of meaning). Forked from
 [controllable-prompt-guide](https://github.com/prompt-tools/controllable-prompt-guide)
 and decoupled into a clean, user-facing production app.
 
-面向非专业用户的**图片**提示词向导(上线版)。一个轻量 AI agent 根据用户已有的选择,
-动态决定下一题、收窄候选选项;最终提示词由选中的选项**确定性拼接**(不靠 AI 改写语义)。
+面向非专业用户的**图片**提示词向导(上线版)。系统根据人像规则和已有选择决定下一题，
+轻量 AI agent 为该题收窄候选选项；最终提示词由选中的选项**确定性拼接**(不靠 AI 改写语义)。
 从主仓库拆出,与评测/旧版彻底解耦,只保留面向用户的现版本。
 
 - **Image-only / 仅图片**: `image_prompt` + `generic_image` — no video work type
-- **Adaptive / 自适应**: an agent picks the next dimension + its candidate options
+- **Rule-routed / 规则路由**: rules pick the next dimension; AI narrows its candidates
 - **Selection-first / 选择优先**: all input is choice-based (no typing required)
 - **Deterministic render / 确定性渲染**: template stitching, not AI rewriting
 - **Server app / 服务端应用**: runs on Vercel; `/api/llm` calls the model with a
@@ -22,14 +22,14 @@ and decoupled into a clean, user-facing production app.
 
 ## Stack / 技术栈
 
-Next.js 15, TypeScript 5.7, React 19, Tailwind CSS v3, Vitest 4
+Next.js 15, TypeScript 5.9, React 19, Tailwind CSS v3, Vitest 4
 
 ## Architecture / 架构
 
 ```
 src/
 ├── app/
-│   ├── page.tsx                      # Home = the adaptive wizard
+│   ├── page.tsx                      # Home = the portrait prompt wizard
 │   └── api/
 │       ├── llm/route.ts              # Server proxy → model provider (built-in key)
 │       └── telemetry/route.ts        # Per-step session recording → Langfuse
@@ -39,7 +39,7 @@ src/
 │   ├── option-card.tsx · output-panel.tsx · brief-preview.tsx · copy-button.tsx
 │   └── error-boundary.tsx
 └── lib/prompt/
-    ├── agent/                        # Adaptive decision engine
+    ├── agent/                        # Rule routing + AI candidate filtering
     │   ├── client.ts                 # buildTurnRequest / autoFill (seed-aware)
     │   ├── active-dimensions.ts      # which dims are active for a precision tier
     │   ├── decision.ts · fill.ts · catalog-manifest.ts · debug-log.ts
