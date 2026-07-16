@@ -133,6 +133,7 @@ export function useAgentGuideController() {
   const [history, setHistory] = useState<AgentHistoryItem[]>([]);
   const [selections, setSelections] = useState<PromptSelections>({});
   const [decision, setDecision] = useState<AgentDecision | null>(null);
+  const [decisionSource, setDecisionSource] = useState<"model" | "fallback" | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [telemetryEnabled, setTelemetryEnabled] = useState(false);
@@ -270,6 +271,7 @@ export function useAgentGuideController() {
       setLoading(true);
       setError(null);
       setDecision(null);
+      setDecisionSource(null);
 
       // H3: browser-side safety ceiling
       if (nextHistory.length >= H3_MAX_TURNS) {
@@ -307,7 +309,7 @@ export function useAgentGuideController() {
         } else {
           consecutiveFallbackRef.current = 0;
         }
-        if (consecutiveFallbackRef.current >= 2) {
+        if (!ADAPTIVE_ROUTING && consecutiveFallbackRef.current >= 2) {
           // Intentionally skip setDecision(next) — the UI transitions to "done"
           // phase which renders the stitched prompt from existing selections.
           logAgent("decision", {
@@ -320,6 +322,7 @@ export function useAgentGuideController() {
           setPhase("done");
           return;
         }
+        setDecisionSource(fallbackUsed ? "fallback" : "model");
 
         if (next.done && nextHistory.length === 0) {
           // Model ended before asking anything — nothing to stitch.
@@ -389,6 +392,7 @@ export function useAgentGuideController() {
       setHistory([]);
       setSelections({});
       setDecision(null);
+      setDecisionSource(null);
       setDraft([]);
       setDraftText("");
       setFreeTexts({});
@@ -421,6 +425,7 @@ export function useAgentGuideController() {
       setHistory([]);
       setSelections({});
       setDecision(null);
+      setDecisionSource(null);
       setDraft([]);
       setDraftText("");
       setFreeTexts({});
@@ -642,6 +647,7 @@ export function useAgentGuideController() {
     error,
     history,
     decision,
+    decisionSource,
     currentDimension,
     visibleOptions,
     suggestedIds,
@@ -659,6 +665,7 @@ export function useAgentGuideController() {
     telemetryEnabled,
     setTelemetryEnabled,
     builtinDemo: BUILTIN_DEMO,
+    adaptiveRouting: ADAPTIVE_ROUTING,
     readKeyFor: (id: string) => readStorage(keyStorageFor(id)),
     saveKeyAndStart,
     startWithDescription,

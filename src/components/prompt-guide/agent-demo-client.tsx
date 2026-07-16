@@ -323,6 +323,7 @@ function AgentDemo() {
     error,
     history,
     decision,
+    decisionSource,
     currentDimension,
     visibleOptions,
     suggestedIds,
@@ -348,6 +349,7 @@ function AgentDemo() {
     setPrecision,
     autoFilledSummary,
     builtinDemo,
+    adaptiveRouting,
     telemetryEnabled,
     setTelemetryEnabled,
   } = useAgentGuideController();
@@ -447,7 +449,7 @@ function AgentDemo() {
             onPrecisionChange={setPrecision}
             telemetryEnabled={telemetryEnabled}
             onTelemetryChange={setTelemetryEnabled}
-            requireDescription={process.env.NEXT_PUBLIC_ADAPTIVE_ROUTING === "1"}
+            requireDescription={adaptiveRouting}
           />
         ) : null}
 
@@ -464,9 +466,16 @@ function AgentDemo() {
               </div>
             ) : (
               <>
-                <h2 className="text-base font-semibold text-slate-950">
-                  {decision?.questionText || currentDimension.title}
-                </h2>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="text-base font-semibold text-slate-950">
+                    {decision?.questionText || currentDimension.title}
+                  </h2>
+                  {decisionSource === "fallback" ? (
+                    <span className="rounded-md bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800">
+                      备用规则
+                    </span>
+                  ) : null}
+                </div>
                 <p className="mt-1 text-sm leading-6 text-slate-600">
                   {decision?.helperText || currentDimension.helper}
                   {currentDimension.mode === "multi" ? "（可多选）" : "（单选）"}
@@ -484,7 +493,7 @@ function AgentDemo() {
                   ))}
                 </div>
 
-                {precision === "detailed" && process.env.NEXT_PUBLIC_ADAPTIVE_ROUTING !== "1" ? (
+                {precision === "detailed" && !adaptiveRouting ? (
                   <AllOptionsDisclosure
                     key={currentDimension.questionId}
                     options={currentDimension.options.filter(

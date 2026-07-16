@@ -44,11 +44,43 @@ const SYSTEM_PROMPT = `你是人像/角色图片向导的出题智能体。只�
 从服务器提供的 eligibleDimensions 中选择当前最能增加差异化信息的一题。不要询问已知事实，不要发明问题或选项。
 Ask 必须返回 done=false、一个 eligible questionId、自然的中文 questionText/helperText，以及该维度 3-6 个唯一 optionIds。`;
 
+const PILLAR_BY_QUESTION_ID: Record<string, Pillar> = {
+  subject: "characterSignature",
+  person_type: "characterSignature",
+  gender_presentation: "characterSignature",
+  age_band: "characterSignature",
+  face_features: "characterSignature",
+  hair: "characterSignature",
+  makeup: "characterSignature",
+  outfit: "characterSignature",
+  body_type: "characterSignature",
+  skin_tone: "characterSignature",
+  character_archetype: "characterSignature",
+  pose: "narrativeBehavior",
+  portrait_expression: "narrativeBehavior",
+  character_interaction: "narrativeBehavior",
+  character_props: "narrativeBehavior",
+  scene: "visualWorld",
+  lighting: "visualWorld",
+  character_render_style: "visualWorld",
+  color_palette: "visualWorld",
+  art_style: "visualWorld",
+  mood: "visualWorld",
+  use_case: "presentationPurpose",
+  framing: "presentationPurpose",
+  aspect_ratio: "presentationPurpose",
+  camera: "presentationPurpose",
+  camera_angle: "presentationPurpose",
+  composition: "presentationPurpose",
+  detail_level: "presentationPurpose",
+  post_processing: "presentationPurpose",
+  constraints: "presentationPurpose",
+};
+
 function pillarFor(questionId: string): Pillar {
-  if (/^(use_case|composition|framing|camera|aspect_ratio|detail|post)/.test(questionId)) return "presentationPurpose";
-  if (/^(pose|expression|action|character_interaction|prop)/.test(questionId)) return "narrativeBehavior";
-  if (/^(scene|background|lighting|art_style|color|mood)/.test(questionId)) return "visualWorld";
-  return "characterSignature";
+  const pillar = PILLAR_BY_QUESTION_ID[questionId];
+  if (!pillar) throw new Error("unmapped_adaptive_dimension");
+  return pillar;
 }
 
 function isHistoryItem(value: unknown): value is AgentHistoryItem {
@@ -71,6 +103,8 @@ export function buildAdaptiveTurnSnapshot(input: unknown): AdaptiveTurnSnapshot 
   }
   if (!Array.isArray(raw.history) || !raw.history.every(isHistoryItem)) throw new Error("invalid_history");
   const history = raw.history;
+  if (history.length > 10) throw new Error("history_budget_exceeded");
+  if (history.length === 10) throw new Error("history_budget_exhausted");
   const manifest = buildCatalogManifest();
   const manifestMap = new Map(manifest.map((dimension) => [dimension.questionId, dimension]));
   for (const item of history) {
