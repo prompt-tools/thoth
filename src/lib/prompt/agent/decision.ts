@@ -11,6 +11,8 @@ export interface AgentHistoryItem {
 export interface AgentDecision {
   /** Dimension id to ask next. Must exist in the catalog manifest. */
   nextQuestionId: string;
+  /** Contextual wording for an Adaptive Ask. Fixed routing uses the catalog title. */
+  questionText?: string;
   /** Subset of that dimension's option ids to surface (the agent narrows). */
   visibleOptionIds: string[];
   /** One short zh sentence guiding the user on this step. */

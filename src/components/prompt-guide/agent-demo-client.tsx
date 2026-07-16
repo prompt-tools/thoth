@@ -153,12 +153,14 @@ function DescribeStep({
   onPrecisionChange,
   telemetryEnabled,
   onTelemetryChange,
+  requireDescription,
 }: {
   onStart: (text: string) => void;
   precision: Precision;
   onPrecisionChange: (p: Precision) => void;
   telemetryEnabled: boolean;
   onTelemetryChange: (enabled: boolean) => void;
+  requireDescription: boolean;
 }) {
   const [text, setText] = useState("");
   return (
@@ -187,16 +189,23 @@ function DescribeStep({
         <span>同意上传本次描述、选择和生成结果，用于改进向导。未勾选时不会上传。</span>
       </label>
       <div className="mt-4 flex flex-wrap items-center gap-3">
-        <Button type="button" onClick={() => onStart(text)} className="justify-center">
+        <Button
+          type="button"
+          onClick={() => onStart(text)}
+          disabled={requireDescription && !text.trim()}
+          className="justify-center"
+        >
           开始
         </Button>
-        <button
-          type="button"
-          onClick={() => onStart("")}
-          className="text-sm font-medium text-slate-500 underline-offset-2 hover:underline"
-        >
-          跳过，直接让 AI 问
-        </button>
+        {!requireDescription ? (
+          <button
+            type="button"
+            onClick={() => onStart("")}
+            className="text-sm font-medium text-slate-500 underline-offset-2 hover:underline"
+          >
+            跳过，直接让 AI 问
+          </button>
+        ) : null}
       </div>
     </section>
   );
@@ -438,6 +447,7 @@ function AgentDemo() {
             onPrecisionChange={setPrecision}
             telemetryEnabled={telemetryEnabled}
             onTelemetryChange={setTelemetryEnabled}
+            requireDescription={process.env.NEXT_PUBLIC_ADAPTIVE_ROUTING === "1"}
           />
         ) : null}
 
@@ -455,7 +465,7 @@ function AgentDemo() {
             ) : (
               <>
                 <h2 className="text-base font-semibold text-slate-950">
-                  {currentDimension.title}
+                  {decision?.questionText || currentDimension.title}
                 </h2>
                 <p className="mt-1 text-sm leading-6 text-slate-600">
                   {decision?.helperText || currentDimension.helper}
@@ -474,7 +484,7 @@ function AgentDemo() {
                   ))}
                 </div>
 
-                {precision === "detailed" ? (
+                {precision === "detailed" && process.env.NEXT_PUBLIC_ADAPTIVE_ROUTING !== "1" ? (
                   <AllOptionsDisclosure
                     key={currentDimension.questionId}
                     options={currentDimension.options.filter(
