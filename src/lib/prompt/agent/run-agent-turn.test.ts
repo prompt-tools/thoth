@@ -1,6 +1,6 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import "../init";
-import { buildTurnRequest, parseTurnResponse, runAgentTurn } from "./client";
+import { buildTurnRequest, parseTurnResponse, requestAdaptiveTurn, runAgentTurn } from "./client";
 import { buildCatalogManifest } from "./catalog-manifest";
 import type { AgentHistoryItem } from "./decision";
 import { activeDimensions } from "./active-dimensions";
@@ -222,5 +222,36 @@ describe("parseTurnResponse (C-9b)", () => {
     const result = parseTurnResponse(provider, resp, ctx);
     expect(result.droppedInvalidOptionIds).toContain("image_fake:bad");
     expect(result.decision!.visibleOptionIds).not.toContain("image_fake:bad");
+  });
+});
+
+describe("requestAdaptiveTurn", () => {
+  it("sends only the Subject brief, history, precision, and credential", async () => {
+    const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      decision: {
+        nextQuestionId: "scene",
+        questionText: "背景在哪里？",
+        helperText: "选择叙事空间。",
+        visibleOptionIds: ["a", "b", "c"],
+        done: false,
+      },
+      diagnostics: { source: "model" },
+    })));
+
+    const result = await requestAdaptiveTurn("secret", {
+      subjectBrief: "雨夜女侦探",
+      history: [],
+      precision: "simple",
+    }, fetcher);
+
+    expect(result.decision.nextQuestionId).toBe("scene");
+    const [url, init] = fetcher.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("/api/adaptive-turn");
+    expect(new Headers(init.headers).get("authorization")).toBe("Bearer secret");
+    expect(JSON.parse(init.body as string)).toEqual({
+      subjectBrief: "雨夜女侦探",
+      history: [],
+      precision: "simple",
+    });
   });
 });

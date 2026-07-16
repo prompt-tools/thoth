@@ -153,12 +153,14 @@ function DescribeStep({
   onPrecisionChange,
   telemetryEnabled,
   onTelemetryChange,
+  requireDescription,
 }: {
   onStart: (text: string) => void;
   precision: Precision;
   onPrecisionChange: (p: Precision) => void;
   telemetryEnabled: boolean;
   onTelemetryChange: (enabled: boolean) => void;
+  requireDescription: boolean;
 }) {
   const [text, setText] = useState("");
   return (
@@ -187,16 +189,23 @@ function DescribeStep({
         <span>同意上传本次描述、选择和生成结果，用于改进向导。未勾选时不会上传。</span>
       </label>
       <div className="mt-4 flex flex-wrap items-center gap-3">
-        <Button type="button" onClick={() => onStart(text)} className="justify-center">
+        <Button
+          type="button"
+          onClick={() => onStart(text)}
+          disabled={requireDescription && !text.trim()}
+          className="justify-center"
+        >
           开始
         </Button>
-        <button
-          type="button"
-          onClick={() => onStart("")}
-          className="text-sm font-medium text-slate-500 underline-offset-2 hover:underline"
-        >
-          跳过，直接让 AI 问
-        </button>
+        {!requireDescription ? (
+          <button
+            type="button"
+            onClick={() => onStart("")}
+            className="text-sm font-medium text-slate-500 underline-offset-2 hover:underline"
+          >
+            跳过，直接让 AI 问
+          </button>
+        ) : null}
       </div>
     </section>
   );
@@ -314,6 +323,7 @@ function AgentDemo() {
     error,
     history,
     decision,
+    decisionSource,
     currentDimension,
     visibleOptions,
     suggestedIds,
@@ -339,6 +349,7 @@ function AgentDemo() {
     setPrecision,
     autoFilledSummary,
     builtinDemo,
+    adaptiveRouting,
     telemetryEnabled,
     setTelemetryEnabled,
   } = useAgentGuideController();
@@ -438,6 +449,7 @@ function AgentDemo() {
             onPrecisionChange={setPrecision}
             telemetryEnabled={telemetryEnabled}
             onTelemetryChange={setTelemetryEnabled}
+            requireDescription={adaptiveRouting}
           />
         ) : null}
 
@@ -454,9 +466,16 @@ function AgentDemo() {
               </div>
             ) : (
               <>
-                <h2 className="text-base font-semibold text-slate-950">
-                  {currentDimension.title}
-                </h2>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="text-base font-semibold text-slate-950">
+                    {decision?.questionText || currentDimension.title}
+                  </h2>
+                  {decisionSource === "fallback" ? (
+                    <span className="rounded-md bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800">
+                      备用规则
+                    </span>
+                  ) : null}
+                </div>
                 <p className="mt-1 text-sm leading-6 text-slate-600">
                   {decision?.helperText || currentDimension.helper}
                   {currentDimension.mode === "multi" ? "（可多选）" : "（单选）"}
@@ -474,7 +493,7 @@ function AgentDemo() {
                   ))}
                 </div>
 
-                {precision === "detailed" ? (
+                {precision === "detailed" && !adaptiveRouting ? (
                   <AllOptionsDisclosure
                     key={currentDimension.questionId}
                     options={currentDimension.options.filter(

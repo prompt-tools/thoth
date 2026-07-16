@@ -7,7 +7,7 @@ import { imagePromptAgentWorkType } from "@/lib/prompt/work-types/image-prompt-a
 import type { PromptSelections, RenderedPrompt } from "@/lib/prompt/types";
 import { buildCatalogManifest } from "@/lib/prompt/agent/catalog-manifest";
 import type { AgentDecision, AgentHistoryItem } from "@/lib/prompt/agent/decision";
-import { runAgentTurn, polishPrompt, autoFillDimensions } from "@/lib/prompt/agent/client";
+import { runAgentTurn, requestAdaptiveTurn, polishPrompt, autoFillDimensions } from "@/lib/prompt/agent/client";
 import { DEFAULT_PROVIDER_ID, getProvider } from "@/lib/prompt/agent/providers";
 import { suggestedIdsFor } from "@/lib/prompt/agent/audit-model";
 import { resolveVisibleOptions } from "@/lib/prompt/agent/options-resolver";
@@ -27,6 +27,7 @@ const PROVIDER_STORAGE = "cipg.agentDemo.provider";
 const keyStorageFor = (providerId: string) => `cipg.agentDemo.key.${providerId}`;
 
 const BUILTIN_DEMO = process.env.NEXT_PUBLIC_AGENT_DEMO_BUILTIN === "1";
+const ADAPTIVE_ROUTING = process.env.NEXT_PUBLIC_ADAPTIVE_ROUTING === "1";
 
 type Phase = "needsKey" | "describe" | "asking" | "done";
 
@@ -132,6 +133,7 @@ export function useAgentGuideController() {
   const [history, setHistory] = useState<AgentHistoryItem[]>([]);
   const [selections, setSelections] = useState<PromptSelections>({});
   const [decision, setDecision] = useState<AgentDecision | null>(null);
+  const [decisionSource, setDecisionSource] = useState<"model" | "fallback" | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [telemetryEnabled, setTelemetryEnabled] = useState(false);
@@ -269,6 +271,7 @@ export function useAgentGuideController() {
       setLoading(true);
       setError(null);
       setDecision(null);
+      setDecisionSource(null);
 
       // H3: browser-side safety ceiling
       if (nextHistory.length >= H3_MAX_TURNS) {
@@ -279,25 +282,34 @@ export function useAgentGuideController() {
       }
 
       try {
-        const { decision: next, diagnostics } = await runAgentTurn(
-          getProvider(providerRef.current),
-          keyRef.current,
-          {
-            manifest,
-            history: nextHistory,
-            userDescription: descriptionRef.current,
-            precision: precisionRef.current,
-          }
-        );
+        const { decision: next, diagnostics } = ADAPTIVE_ROUTING
+          ? await requestAdaptiveTurn(keyRef.current, {
+              subjectBrief: descriptionRef.current,
+              history: nextHistory,
+              precision: precisionRef.current,
+            })
+          : await runAgentTurn(
+              getProvider(providerRef.current),
+              keyRef.current,
+              {
+                manifest,
+                history: nextHistory,
+                userDescription: descriptionRef.current,
+                precision: precisionRef.current,
+              }
+            );
         if (sessionRef.current !== mySession) return; // superseded
 
         // Track consecutive fallbacks — if ≥ 2, stop dragging and end
-        if (diagnostics.fallbackUsed) {
+        const fallbackUsed = "fallbackUsed" in diagnostics
+          ? diagnostics.fallbackUsed
+          : diagnostics.source === "fallback";
+        if (fallbackUsed) {
           consecutiveFallbackRef.current++;
         } else {
           consecutiveFallbackRef.current = 0;
         }
-        if (consecutiveFallbackRef.current >= 2) {
+        if (!ADAPTIVE_ROUTING && consecutiveFallbackRef.current >= 2) {
           // Intentionally skip setDecision(next) — the UI transitions to "done"
           // phase which renders the stitched prompt from existing selections.
           logAgent("decision", {
@@ -310,6 +322,7 @@ export function useAgentGuideController() {
           setPhase("done");
           return;
         }
+        setDecisionSource(fallbackUsed ? "fallback" : "model");
 
         if (next.done && nextHistory.length === 0) {
           // Model ended before asking anything — nothing to stitch.
@@ -379,6 +392,7 @@ export function useAgentGuideController() {
       setHistory([]);
       setSelections({});
       setDecision(null);
+      setDecisionSource(null);
       setDraft([]);
       setDraftText("");
       setFreeTexts({});
@@ -400,6 +414,10 @@ export function useAgentGuideController() {
   /** Leave the describe step (with or without text) and ask the first question. */
   const startWithDescription = useCallback(
     (text: string) => {
+      if (ADAPTIVE_ROUTING && !text.trim()) {
+        setError("请先描述你想要的人物或角色。");
+        return;
+      }
       setDescription(text);
       descriptionRef.current = text;
       // C-9c: route primary type for display
@@ -407,6 +425,7 @@ export function useAgentGuideController() {
       setHistory([]);
       setSelections({});
       setDecision(null);
+      setDecisionSource(null);
       setDraft([]);
       setDraftText("");
       setFreeTexts({});
@@ -430,6 +449,11 @@ export function useAgentGuideController() {
 
   const visibleOptions = useMemo(() => {
     if (!decision || !currentDimension) return [];
+    if (ADAPTIVE_ROUTING) {
+      return decision.visibleOptionIds
+        .map((id) => currentDimension.options.find((option) => option.id === id))
+        .filter((option): option is NonNullable<typeof option> => Boolean(option));
+    }
     const { visible } = resolveVisibleOptions(
       currentDimension,
       decision.visibleOptionIds,
@@ -623,6 +647,7 @@ export function useAgentGuideController() {
     error,
     history,
     decision,
+    decisionSource,
     currentDimension,
     visibleOptions,
     suggestedIds,
@@ -640,6 +665,7 @@ export function useAgentGuideController() {
     telemetryEnabled,
     setTelemetryEnabled,
     builtinDemo: BUILTIN_DEMO,
+    adaptiveRouting: ADAPTIVE_ROUTING,
     readKeyFor: (id: string) => readStorage(keyStorageFor(id)),
     saveKeyAndStart,
     startWithDescription,

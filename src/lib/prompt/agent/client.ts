@@ -13,6 +13,7 @@ import type { Precision } from "./gradient";
 import { GRADIENT } from "./gradient";
 import { conflictIdsFor, suggestedIdsFor } from "./audit-model";
 import { heuristicFillGaps, missingPortraitCoreFill } from "./fill";
+import type { AdaptiveTurnResult } from "./adaptive-turn";
 
 const ANTHROPIC_VERSION = "2023-06-01";
 const PROXY_URL = "/api/llm";
@@ -506,6 +507,30 @@ export async function requestNextStep(
     precision: ctx.precision,
   });
   return decision;
+}
+
+/** Browser adapter for the server-owned Adaptive Ask boundary. The browser
+ * sends state and a credential only; the server owns catalog and model input. */
+export async function requestAdaptiveTurn(
+  apiKey: string,
+  args: { subjectBrief: string; history: AgentHistoryItem[]; precision: Precision },
+  fetcher: typeof fetch = fetch,
+): Promise<AdaptiveTurnResult> {
+  const response = await fetcher("/api/adaptive-turn", {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${apiKey}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify(args),
+  });
+  const text = await response.text();
+  if (!response.ok) throw new Error(`${response.status}: ${text.slice(0, 400)}`);
+  try {
+    return JSON.parse(text) as AdaptiveTurnResult;
+  } catch {
+    throw new Error(`Adaptive route returned non-JSON: ${text.slice(0, 200)}`);
+  }
 }
 
 export async function polishPrompt(
