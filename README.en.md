@@ -58,6 +58,10 @@ Next.js 15 · TypeScript 5.9 · React 19 · Tailwind CSS v3 · Vitest 4. Deploye
 Vercel: `/api/llm` proxies the model server-side (built-in key); with user consent,
 `/api/telemetry` records the Journey for analysis.
 
+Known residual risk: `npm audit --omit=dev` still reports two moderate findings in
+Next's nested PostCSS with no fix available. The app does not compile user-supplied
+CSS, so it does not force an unsafe dependency override; upgrade when Next ships a fix.
+
 ## Portrait Dimensions
 
 **Retained visual dimensions:** use case · portrait subject · scene · composition · lighting · art style · color · mood · framing · camera angle · aspect ratio · detail · post-processing

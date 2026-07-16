@@ -24,6 +24,23 @@ describe("POST /api/llm", () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
+  it("rejects a non-string authorization header", async () => {
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const response = await POST(new Request("http://localhost/api/llm", {
+      method: "POST",
+      body: JSON.stringify({
+        endpoint: "https://api.deepseek.com/chat/completions",
+        headers: { authorization: 1 },
+        body: { messages: [] },
+      }),
+    }));
+
+    expect(response.status).toBe(400);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
   it("rejects demo-key requests outside the fixed chat-completions endpoint", async () => {
     vi.stubEnv("DEMO_DEEPSEEK_KEY", "server-key");
     const fetchSpy = vi.fn();

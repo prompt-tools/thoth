@@ -10,12 +10,6 @@ import { NextResponse } from "next/server";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-interface ProxyRequest {
-  endpoint: string;
-  headers: Record<string, string>;
-  body: unknown;
-}
-
 const DEMO_ENDPOINT = "https://api.deepseek.com/chat/completions";
 const DEMO_MODEL = "deepseek-v4-flash";
 const DEMO_MAX_TOKENS = 512;
@@ -43,11 +37,15 @@ function isDisallowedHost(hostname: string): boolean {
 }
 
 export async function POST(request: Request) {
-  let payload: ProxyRequest;
+  let payload: unknown;
   try {
-    payload = (await request.json()) as ProxyRequest;
+    payload = await request.json();
   } catch {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
+
+  if (!isRecord(payload)) {
+    return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }
 
   const { endpoint, headers, body } = payload;
@@ -73,7 +71,10 @@ export async function POST(request: Request) {
   // DEMO_DEEPSEEK_KEY is a server env var (NOT NEXT_PUBLIC), so it never reaches the browser —
   // users can spend it through this proxy but cannot read it. Locked to api.deepseek.com so
   // the built-in key can't be used to proxy arbitrary endpoints.
-  const fwdHeaders: Record<string, string> = { ...(headers ?? {}) };
+  if (headers !== undefined && (!isRecord(headers) || Object.values(headers).some((value) => typeof value !== "string"))) {
+    return NextResponse.json({ error: "Invalid headers" }, { status: 400 });
+  }
+  const fwdHeaders = { ...(headers ?? {}) } as Record<string, string>;
   const auth = (fwdHeaders.authorization ?? fwdHeaders.Authorization ?? "").trim();
   let upstreamBody = body;
   if (auth === "Bearer __demo__") {
