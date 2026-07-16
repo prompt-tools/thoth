@@ -129,7 +129,7 @@ describe("prompt configuration validation (image-only)", () => {
     expect(errors[0]).toContain("nonexistent_option");
   });
 
-  it("appends automatic quality and minor-protection negatives (TEST-08)", () => {
+  it("keeps user-selected constraints alongside automatic safety defaults (TEST-08)", () => {
     const result = renderPrompt({
       workType: imageWorkType,
       rawIntent: "",
@@ -141,7 +141,7 @@ describe("prompt configuration validation (image-only)", () => {
 
     expect(result.zhPrompt).toContain("避免未成年或青少年角色的性感化");
     expect(result.zhPrompt).toContain("避免畸形、多余肢体和面部扭曲");
-    expect(result.zhPrompt).not.toContain("避免名人肖像");
+    expect(result.zhPrompt).toContain("避免画面拥挤混乱");
     expect(result.warnings.some((w) => w.zh.includes("已取消预选的安全约束"))).toBe(false);
   });
 
@@ -163,8 +163,7 @@ describe("prompt configuration validation (image-only)", () => {
     });
 
     expect(result.zhPrompt.length).toBeGreaterThan(0);
-    const constraintsItem = result.brief.items.find((i) => i.questionId === "constraints");
-    expect(constraintsItem).toBeUndefined();
+    expect(result.zhPrompt).toContain("避免名人肖像");
     expect(result.zhPrompt).toContain("避免畸形、多余肢体和面部扭曲");
   });
 });

@@ -45,6 +45,35 @@ describe("conflictIdsFor (A2)", () => {
     expect(conflictIdsFor([]).size).toBe(0);
     expect(conflictIdsFor([], { includeCaution: true }).size).toBe(0);
   });
+  it("drops model picks for dimensions outside fillSet", async () => {
+    const subject = manifest.find((d) => d.questionId === "subject")!;
+    const scene = manifest.find((d) => d.questionId === "scene")!;
+    const transport = async () => ({
+      choices: [{
+        message: {
+          tool_calls: [{
+            function: {
+              name: "fill_dimensions",
+              arguments: JSON.stringify({
+                picks: [
+                  { questionId: "subject", optionIds: [subject.options[1].id] },
+                  { questionId: "scene", optionIds: [scene.options[0].id] },
+                ],
+              }),
+            },
+          }],
+        },
+      }],
+    });
+
+    const result = await autoFillDimensions(provider, "test-key", {
+      manifest,
+      history: [{ questionId: "subject", selectedOptionIds: [subject.options[0].id] }],
+      fillSet: ["scene"],
+    }, transport);
+
+    expect(result).toEqual([{ questionId: "scene", selectedOptionIds: [scene.options[0].id] }]);
+  });
 });
 
 // ── computeFillSet ──────────────────────────────────────────────────────

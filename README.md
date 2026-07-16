@@ -10,7 +10,7 @@ Language switcher / 语言切换
 
 > 面向非专业用户的**人像/人物/角色**提示词生成工具。只做选择题,把“漂亮女生/男生、游戏角色、小说人物、乙游角色、虚拟角色”等模糊需求转成可复制到通用图片模型里的专业提示词。
 >
-> **v0.1.0** — AI 自适应版,上线于 Vercel。欢迎反馈。
+> **v0.1.0** — 规则路由 + AI 候选筛选版，上线于 Vercel。欢迎反馈。
 
 ## 立即使用
 
@@ -28,7 +28,7 @@ npm run dev
 ## 它怎么工作
 
 1. 用一句话说说你想要的人物或角色(也可以跳过)。
-2. AI 根据你已有的选择,**动态决定下一题**和该题的候选选项——而不是一次性铺开所有选择题。
+2. 系统根据人像规则和已有选择决定下一题，AI 再为该题筛选最相关的候选选项——而不是一次性铺开所有选择题。
 3. 你没回答的维度,AI 会据你已选的风格**自动补全**(可在结果里删改)。
 4. 最终提示词由你选中的选项**确定性拼接**生成,不靠 AI 改写语义。画质负向词与未成年保护**自动附加**,无需单独选择。输出中文 / 英文 prompt。
 
@@ -57,7 +57,9 @@ npm run dev
 
 ## 技术栈
 
-Next.js 15 · TypeScript 5.7 · React 19 · Tailwind CSS v3 · Vitest 4。部署在 Vercel:`/api/llm` 服务端代理调用模型(内置 key),`/api/telemetry` 记录每步选择用于分析。
+Next.js 15 · TypeScript 5.9 · React 19 · Tailwind CSS v3 · Vitest 4。部署在 Vercel:`/api/llm` 服务端代理调用模型(内置 key)；仅在用户同意后，`/api/telemetry` 才记录本次会话用于分析。
+
+已知残留风险：`npm audit --omit=dev` 仍报告 Next 内嵌 PostCSS 的 2 个中等告警（当前无可用修复）。应用不编译用户提供的 CSS，因此不强制覆盖依赖树；待 Next 提供安全版本后正常升级。
 
 ## 命令
 
@@ -77,7 +79,7 @@ npm run build
 
 | 仓库 | 内容 |
 |------|------|
-| **thoth**（本仓库） | 上线版:仅图片、AI 自适应向导 |
+| **thoth**（本仓库） | 上线版：仅图片、规则路由 + AI 候选筛选向导 |
 | **[controllable-image-prompt-guide](https://github.com/prompt-tools/controllable-image-prompt-guide)** | 开发 + 评测仓: agent eval 流水线（人像 seed 见 `.research/eval-seeds/portrait-seeds.txt`） |
 | **[cipg-eval-test](https://github.com/prompt-tools/cipg-eval-test)** | 私有评测床: GitHub Actions + DeepSeek 定时 eval |
 

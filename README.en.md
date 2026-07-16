@@ -12,7 +12,7 @@ Language switcher / 语言切换
 > ideas like attractive women/men, game characters, novel protagonists, otome
 > characters, and virtual idols into copy-ready prompts through guided choices.
 >
-> **v0.1.0** — AI-adaptive build, live on Vercel. Feedback welcome.
+> **v0.1.0** — rule-routed build with AI candidate filtering, live on Vercel. Feedback welcome.
 
 ## Try it
 
@@ -31,8 +31,8 @@ npm run dev
 ## How it works
 
 1. Describe the person or character in one line (or skip).
-2. An AI agent **decides the next question** — and that question's candidate
-   options — from what you've already chosen, instead of dumping every field at once.
+2. Portrait rules choose the next question from what you have already answered;
+   AI then narrows that question's candidate options instead of dumping every field at once.
 3. Dimensions you skip are **auto-filled** to match your chosen style (editable in
    the result).
 4. The final prompt is **deterministically stitched** from your selected options —
@@ -54,9 +54,13 @@ dimensions into understandable choices.
 
 ## Stack
 
-Next.js 15 · TypeScript 5.7 · React 19 · Tailwind CSS v3 · Vitest 4. Deployed on
-Vercel: `/api/llm` proxies the model server-side (built-in key); `/api/telemetry`
-records each step for analysis.
+Next.js 15 · TypeScript 5.9 · React 19 · Tailwind CSS v3 · Vitest 4. Deployed on
+Vercel: `/api/llm` proxies the model server-side (built-in key); with user consent,
+`/api/telemetry` records the Journey for analysis.
+
+Known residual risk: `npm audit --omit=dev` still reports two moderate findings in
+Next's nested PostCSS with no fix available. The app does not compile user-supplied
+CSS, so it does not force an unsafe dependency override; upgrade when Next ships a fix.
 
 ## Portrait Dimensions
 

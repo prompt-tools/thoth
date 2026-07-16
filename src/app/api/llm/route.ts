@@ -10,10 +10,12 @@ import { NextResponse } from "next/server";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-interface ProxyRequest {
-  endpoint: string;
-  headers: Record<string, string>;
-  body: unknown;
+const DEMO_ENDPOINT = "https://api.deepseek.com/chat/completions";
+const DEMO_MODEL = "deepseek-v4-flash";
+const DEMO_MAX_TOKENS = 512;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 /** Block forwarding to loopback / private / link-local hosts to avoid SSRF
@@ -35,11 +37,15 @@ function isDisallowedHost(hostname: string): boolean {
 }
 
 export async function POST(request: Request) {
-  let payload: ProxyRequest;
+  let payload: unknown;
   try {
-    payload = (await request.json()) as ProxyRequest;
+    payload = await request.json();
   } catch {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
+
+  if (!isRecord(payload)) {
+    return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }
 
   const { endpoint, headers, body } = payload;
@@ -60,26 +66,39 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Endpoint host is not allowed" }, { status: 400 });
   }
 
-  const serialized = JSON.stringify(body);
-  if (serialized.length > 64 * 1024) {
-    return NextResponse.json({ error: "Request body too large" }, { status: 413 });
-  }
-
   // Built-in demo key: when the client sends no real key (demo mode sends the sentinel
   // "Bearer __demo__"), inject the SERVER-SIDE DeepSeek key for the DeepSeek endpoint only.
   // DEMO_DEEPSEEK_KEY is a server env var (NOT NEXT_PUBLIC), so it never reaches the browser —
   // users can spend it through this proxy but cannot read it. Locked to api.deepseek.com so
   // the built-in key can't be used to proxy arbitrary endpoints.
-  const fwdHeaders: Record<string, string> = { ...(headers ?? {}) };
-  const auth = fwdHeaders.authorization ?? fwdHeaders.Authorization ?? "";
-  if (auth === "" || auth === "Bearer __demo__" || auth === "Bearer ") {
+  if (headers !== undefined && (!isRecord(headers) || Object.values(headers).some((value) => typeof value !== "string"))) {
+    return NextResponse.json({ error: "Invalid headers" }, { status: 400 });
+  }
+  const fwdHeaders = { ...(headers ?? {}) } as Record<string, string>;
+  const auth = (fwdHeaders.authorization ?? fwdHeaders.Authorization ?? "").trim();
+  let upstreamBody = body;
+  if (auth === "Bearer __demo__") {
     const serverKey = process.env.DEMO_DEEPSEEK_KEY;
     delete fwdHeaders.Authorization;
-    if (serverKey && url.hostname === "api.deepseek.com") {
+    if (serverKey && url.toString() === DEMO_ENDPOINT && isRecord(body)) {
       fwdHeaders.authorization = `Bearer ${serverKey}`;
+      upstreamBody = {
+        ...body,
+        model: DEMO_MODEL,
+        max_tokens: DEMO_MAX_TOKENS,
+        stream: false,
+        thinking: { type: "disabled" },
+      };
     } else {
       return NextResponse.json({ error: "No API key (built-in demo key unavailable for this endpoint)" }, { status: 401 });
     }
+  } else if (!auth || auth.toLowerCase() === "bearer") {
+    return NextResponse.json({ error: "Missing API key" }, { status: 401 });
+  }
+
+  const serialized = JSON.stringify(upstreamBody);
+  if (Buffer.byteLength(serialized, "utf8") > 64 * 1024) {
+    return NextResponse.json({ error: "Request body too large" }, { status: 413 });
   }
 
   const ac = new AbortController();

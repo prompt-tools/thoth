@@ -192,6 +192,17 @@ describe("runAgentTurn (C-9b gradient)", () => {
     expect(decision.visibleOptionIds).not.toContain("image_subject:pet_animal");
     expect(decision.visibleOptionIds).not.toContain("image_subject:food_beverage");
   });
+
+  it("drops non-portrait subject ids when the model mixes them with valid ids", async () => {
+    const { decision } = await runAgentTurn(
+      provider,
+      "test-key",
+      { manifest, history: [], userDescription: "橘色小猫" },
+      async () => makeResp(["image_subject:pet_animal", "image_subject:beautiful_woman"]),
+    );
+
+    expect(decision.visibleOptionIds).toEqual(["image_subject:beautiful_woman"]);
+  });
 });
 
 describe("parseTurnResponse (C-9b)", () => {

@@ -56,7 +56,12 @@ export function renderPrompt(params: {
 }): RenderedPrompt {
   const target = resolveTarget(IMAGE_TARGET_ID);
   const adapter = resolveAdapter();
-  // Constraints are injected automatically — never part of the user's choices.
+  const constraintQuestion = params.workType.questions.find((question) => question.id === "constraints");
+  const selectedConstraints = (Array.isArray(params.selections.constraints)
+    ? params.selections.constraints
+    : params.selections.constraints ? [params.selections.constraints] : [])
+    .slice(0, constraintQuestion?.maxSelections);
+  // Constraints share one rendering path so user choices and required defaults dedupe.
   const { constraints: _omit, ...selectionsWithoutConstraints } = params.selections;
   void _omit;
 
@@ -69,8 +74,9 @@ export function renderPrompt(params: {
   });
 
   let rendered = adapter.render(brief, params.negPromptTier);
-  if (target.safetyDefaults.length > 0) {
-    rendered = appendAutomaticConstraints(rendered, target.safetyDefaults);
+  const constraintIds = [...new Set([...selectedConstraints, ...target.safetyDefaults])];
+  if (constraintIds.length > 0) {
+    rendered = appendAutomaticConstraints(rendered, constraintIds);
   }
 
   const heuristicWarnings = evaluatePromptQuality(

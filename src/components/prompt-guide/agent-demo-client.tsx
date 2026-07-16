@@ -61,8 +61,9 @@ function KeyGate({
         BYOK（自带 key）：key 仅保存在你浏览器的 localStorage。调用经本地代理（/api/llm）转发到服务商，绕开浏览器跨域限制。
       </p>
 
-      <label className="mt-4 block text-xs font-medium text-slate-500">服务商</label>
+      <label htmlFor="provider" className="mt-4 block text-xs font-medium text-slate-500">服务商</label>
       <select
+        id="provider"
         value={providerId}
         onChange={(e) => switchProvider(e.target.value)}
         className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-900 focus:outline-none"
@@ -74,8 +75,9 @@ function KeyGate({
         ))}
       </select>
 
-      <label className="mt-4 block text-xs font-medium text-slate-500">API Key</label>
+      <label htmlFor="api-key" className="mt-4 block text-xs font-medium text-slate-500">API Key</label>
       <input
+        id="api-key"
         type="password"
         value={value}
         onChange={(e) => setValue(e.target.value)}
@@ -118,7 +120,7 @@ function PrecisionSelector({
   onChange: (p: Precision) => void;
 }) {
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="flex flex-wrap items-center gap-2" role="group" aria-label="提问精细度">
       <span className="text-xs font-medium text-slate-500">提问精细度</span>
       <div className="inline-flex rounded-md border border-slate-200 bg-slate-50 p-0.5">
         {PRECISION_OPTIONS.map((opt) => (
@@ -127,6 +129,7 @@ function PrecisionSelector({
             type="button"
             onClick={() => onChange(opt.value)}
             title={opt.hint}
+            aria-pressed={value === opt.value}
             className={`rounded px-3 py-1 text-xs font-medium transition-colors ${
               value === opt.value
                 ? "bg-white text-slate-950 shadow-sm"
@@ -148,10 +151,14 @@ function DescribeStep({
   onStart,
   precision,
   onPrecisionChange,
+  telemetryEnabled,
+  onTelemetryChange,
 }: {
   onStart: (text: string) => void;
   precision: Precision;
   onPrecisionChange: (p: Precision) => void;
+  telemetryEnabled: boolean;
+  onTelemetryChange: (enabled: boolean) => void;
 }) {
   const [text, setText] = useState("");
   return (
@@ -161,13 +168,24 @@ function DescribeStep({
       <p className="mt-1 text-sm leading-6 text-slate-600">
         随便说，比如「海边回眸的女生，胶片感」或「乙游男主牵手 POV」。若描述的是产品、动物或纯风景，请改写成人物/角色场景；AI 会据此决定先问哪些维度。画质负向词与未成年保护会自动写入最终 prompt，无需单独选择。
       </p>
+      <label htmlFor="description" className="sr-only">人物或角色描述</label>
       <textarea
+        id="description"
         value={text}
         onChange={(e) => setText(e.target.value)}
         rows={3}
         placeholder="例如：银发游戏角色立绘，清冷神秘，夜色城堡背景"
         className="mt-3 w-full resize-y rounded-md border border-slate-300 px-3 py-2 text-sm leading-6 focus:border-slate-900 focus:outline-none"
       />
+      <label className="mt-3 flex items-start gap-2 text-xs leading-5 text-slate-600">
+        <input
+          type="checkbox"
+          checked={telemetryEnabled}
+          onChange={(event) => onTelemetryChange(event.target.checked)}
+          className="mt-1"
+        />
+        <span>同意上传本次描述、选择和生成结果，用于改进向导。未勾选时不会上传。</span>
+      </label>
       <div className="mt-4 flex flex-wrap items-center gap-3">
         <Button type="button" onClick={() => onStart(text)} className="justify-center">
           开始
@@ -321,6 +339,8 @@ function AgentDemo() {
     setPrecision,
     autoFilledSummary,
     builtinDemo,
+    telemetryEnabled,
+    setTelemetryEnabled,
   } = useAgentGuideController();
 
   if (phase === "needsKey") {
@@ -376,7 +396,16 @@ function AgentDemo() {
 
         {error ? (
           <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm leading-6 text-red-800">
-            {error}
+            <p>{error}</p>
+            {phase === "asking" && !loading && !currentDimension ? (
+              <button
+                type="button"
+                onClick={retryStep}
+                className="mt-2 font-medium text-red-800 underline-offset-2 hover:underline"
+              >
+                重试
+              </button>
+            ) : null}
           </div>
         ) : null}
 
@@ -407,6 +436,8 @@ function AgentDemo() {
             onStart={startWithDescription}
             precision={precision}
             onPrecisionChange={setPrecision}
+            telemetryEnabled={telemetryEnabled}
+            onTelemetryChange={setTelemetryEnabled}
           />
         ) : null}
 
@@ -471,10 +502,11 @@ function AgentDemo() {
                 ) : null}
 
                 <div className="mt-4">
-                  <label className="block text-xs font-medium text-slate-500">
+                  <label htmlFor="draft-text" className="block text-xs font-medium text-slate-500">
                     都不合适？直接输入（会覆盖本题的选项）
                   </label>
                   <input
+                    id="draft-text"
                     type="text"
                     value={draftText}
                     onChange={(e) => setDraftText(e.target.value)}
@@ -566,7 +598,7 @@ function AgentDemo() {
               {autoFilledSummary.length > 0 ? (
                 <section className="rounded-md border border-amber-200 bg-amber-50 p-4">
                   <h3 className="text-sm font-semibold text-amber-800">
-                    ✨ AI 自动补充（你没选，AI 据你已选风格补的，可在结果里删改）
+                    ✨ AI 自动补充（你没选，AI 据你已选风格补的）
                   </h3>
                   <ul className="mt-2 space-y-1 text-sm text-amber-900">
                     {autoFilledSummary.map((s) => (

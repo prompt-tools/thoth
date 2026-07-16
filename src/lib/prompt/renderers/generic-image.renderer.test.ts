@@ -114,6 +114,22 @@ describe("P6 portrait renderer coupling: pose/outfit/hair fold into subject phra
     expect(rendered.zhPrompt).not.toContain("休闲轻便服装");
     expect(rendered.zhPrompt).not.toContain("整洁短发");
   });
+
+  it("keeps portrait details when the subject is free text", () => {
+    const rendered = renderPrompt({
+      workType: imagePromptAgentWorkType,
+      rawIntent: "",
+      selections: {
+        outfit: ["image_outfit:casual_wear"],
+        pose: ["image_pose:standing"],
+      },
+      freeTexts: { subject: "戴头盔的宇航员" },
+    });
+
+    expect(rendered.zhPrompt).toContain("戴头盔的宇航员");
+    expect(rendered.zhPrompt).toContain("休闲");
+    expect(rendered.zhPrompt).toContain("站立");
+  });
 });
 
 describe("generic-image renderer snapshot", () => {

@@ -74,6 +74,12 @@ function identifyScopedDims(
   const scoped = new Set<string>();
   const subjectItem = brief.items.find((item) => item.questionId === "subject");
   if (!subjectItem) return scoped;
+  if (subjectItem.freeText) {
+    for (const item of brief.items) {
+      if (!tpl[item.questionId] && scopedIndex.has(item.questionId)) scoped.add(item.questionId);
+    }
+    return scoped;
+  }
   const selectedSubjectIds = new Set(subjectItem.selectedOptions.map((o) => o.id));
   for (const item of brief.items) {
     if (tpl[item.questionId]) continue;
