@@ -39,6 +39,46 @@ function malformedCompletionResponse() {
 }
 
 describe("Adaptive multi-turn snapshot", () => {
+  it("does not treat undecided bare dimension names as exact material facts", () => {
+    const snapshot = buildAdaptiveTurnSnapshot({
+      subjectBrief: "女战士，背景和服装还没想好，表情、光线、色调、氛围都请帮我决定，做电影海报",
+      history: [],
+      precision: "simple",
+    });
+    const facts = new Map(snapshot.knownFacts.map((fact) => [fact.dimension, fact]));
+
+    for (const dimension of ["scene", "outfit", "portrait_expression", "lighting", "color_palette", "mood"]) {
+      expect(facts.get(dimension)?.materiallyDifferentiating ?? false).toBe(false);
+      expect(snapshot.eligibleDimensions.map((item) => item.questionId)).toContain(dimension);
+    }
+    expect(snapshot.completionEligible).toBe(false);
+  });
+
+  it("does not count an unknown Free-text answer as material coverage", () => {
+    const snapshot = buildAdaptiveTurnSnapshot({
+      subjectBrief: "原创游侠角色",
+      history: [{ questionId: "scene", selectedOptionIds: [], freeText: "不知道，请帮我决定" }],
+      precision: "simple",
+    });
+    const fact = snapshot.knownFacts.find((item) => item.source === "history" && item.dimension === "scene");
+
+    expect(fact?.materiallyDifferentiating).toBe(false);
+    expect(snapshot.coveredPillars).not.toContain("visualWorld");
+    expect(snapshot.completionEligible).toBe(false);
+  });
+
+  it("uses exact Brief catalog facts to remove cross-dimension conflicts", () => {
+    const snapshot = buildAdaptiveTurnSnapshot({
+      subjectBrief: "少年游侠角色，体型还没想好",
+      history: [],
+      precision: "simple",
+    });
+    const body = snapshot.eligibleDimensions.find((dimension) => dimension.questionId === "body_type");
+
+    expect(body).toBeDefined();
+    expect(body?.candidates.map((option) => option.id)).not.toContain("image_body_type:curvy");
+  });
+
   it.each([
     ["银发女骑士角色设定表，正侧背三视图，白底", ["camera_angle", "pose", "scene"]],
     ["疲惫的私家侦探，黑色小说封面", ["mood", "use_case"]],

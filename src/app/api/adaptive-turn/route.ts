@@ -20,6 +20,8 @@ export const dynamic = "force-dynamic";
 function withTurnState(result: AdaptiveTurnResult, snapshot: AdaptiveTurnSnapshot, secret: string) {
   const questionId = result.decision.nextQuestionId;
   if (result.decision.done || !questionId) return result;
+  const dimension = snapshot.eligibleDimensions.find((item) => item.questionId === questionId);
+  if (!dimension) throw new Error("invalid_adaptive_decision");
   return {
     ...result,
     turnToken: issueAcceptedAskToken({
@@ -28,6 +30,8 @@ function withTurnState(result: AdaptiveTurnResult, snapshot: AdaptiveTurnSnapsho
       history: snapshot.history,
       questionId,
       optionIds: result.decision.visibleOptionIds,
+      mode: dimension.mode,
+      maxSelections: dimension.maxSelections,
     }),
   };
 }
@@ -43,7 +47,9 @@ export async function POST(request: Request) {
     : rawAuth.startsWith("Bearer ") ? rawAuth.slice(7).trim() : "";
   if (!serverKey) return NextResponse.json({ error: "Missing API key" }, { status: 401 });
   const turnSecret = process.env.ADAPTIVE_TURN_SECRET?.trim();
-  if (!turnSecret) return NextResponse.json({ error: "Adaptive turn state unavailable" }, { status: 503 });
+  if (!turnSecret || Buffer.byteLength(turnSecret, "utf8") < 32) {
+    return NextResponse.json({ error: "Adaptive turn state unavailable" }, { status: 503 });
+  }
 
   const controller = new AbortController();
   const timeoutError = new Error("adaptive_turn_timeout");

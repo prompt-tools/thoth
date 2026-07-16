@@ -82,6 +82,7 @@ export interface CatalogDimension {
   title: string;
   helper: string;
   mode: "single" | "multi" | "free_text";
+  maxSelections?: number;
   options: CatalogOption[];
 }
 
@@ -118,6 +119,7 @@ export function buildCatalogManifest(): CatalogManifest {
       title: question.title.zh,
       helper: question.helper.zh,
       mode: question.mode,
+      maxSelections: question.maxSelections,
       options,
     });
   }

@@ -7,6 +7,8 @@ interface AcceptedAskState {
   historyHash: string;
   questionId: string;
   optionIds: string[];
+  mode: "single" | "multi" | "free_text";
+  maxSelections?: number;
   expiresAt: number;
 }
 
@@ -28,6 +30,8 @@ export function issueAcceptedAskToken(args: {
   history: AgentHistoryItem[];
   questionId: string;
   optionIds: string[];
+  mode: "single" | "multi" | "free_text";
+  maxSelections?: number;
   now?: number;
 }): string {
   const payload: AcceptedAskState = {
@@ -36,6 +40,8 @@ export function issueAcceptedAskToken(args: {
     historyHash: historyDigest(args.history),
     questionId: args.questionId,
     optionIds: args.optionIds,
+    mode: args.mode,
+    ...(args.maxSelections === undefined ? {} : { maxSelections: args.maxSelections }),
     expiresAt: (args.now ?? Date.now()) + 30 * 60 * 1000,
   };
   const encodedPayload = Buffer.from(JSON.stringify(payload), "utf8").toString("base64url");
@@ -74,15 +80,25 @@ export function verifySubmittedTurnState(secret: string, input: unknown, now = D
   } catch {
     throw new Error("invalid_turn_state");
   }
-  if (payload.version !== 1 || !Number.isFinite(payload.expiresAt) || payload.expiresAt < now) {
+  if (payload.version !== 1 || !Number.isFinite(payload.expiresAt) || payload.expiresAt <= now) {
     throw new Error("invalid_turn_state");
   }
   const answer = raw.history.at(-1)!;
   const prefix = raw.history.slice(0, -1);
+  const uniqueOptionIds = new Set(answer.selectedOptionIds);
+  const hasFreeText = answer.freeText !== undefined;
+  if (uniqueOptionIds.size !== answer.selectedOptionIds.length
+    || (hasFreeText && !answer.freeText?.trim())
+    || (hasFreeText && answer.selectedOptionIds.length > 0)
+    || (payload.mode === "single" && answer.selectedOptionIds.length > 1)
+    || (payload.maxSelections !== undefined && answer.selectedOptionIds.length > payload.maxSelections)) {
+    throw new Error("invalid_turn_state");
+  }
   if (payload.subjectHash !== digest(raw.subjectBrief.trim())
     || payload.historyHash !== historyDigest(prefix)
     || payload.questionId !== answer.questionId
     || !Array.isArray(payload.optionIds)
+    || !["single", "multi", "free_text"].includes(payload.mode)
     || answer.selectedOptionIds.some((id) => !payload.optionIds.includes(id))) {
     throw new Error("invalid_turn_state");
   }

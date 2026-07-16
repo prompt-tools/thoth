@@ -3,6 +3,7 @@ import {
   analyzeAdaptiveBrief,
   materialHistoryValue,
   PILLAR_BY_QUESTION_ID,
+  unresolvedBriefDimensions,
   type AdaptiveKnownFact,
   type DifferentiationPillar,
 } from "./adaptive-brief";
@@ -22,6 +23,7 @@ export interface AdaptiveEligibleDimension {
   title: string;
   helper: string;
   mode: CatalogDimension["mode"];
+  maxSelections?: number;
   pillar: DifferentiationPillar;
   candidates: CatalogDimension["options"];
 }
@@ -117,7 +119,10 @@ export function buildAdaptiveTurnSnapshot(input: unknown): AdaptiveTurnSnapshot 
   const budget = deriveBudget(knownFacts, history.length);
   if (history.length > budget.limit) throw new Error("history_budget_exceeded");
 
-  const selectedIds = history.flatMap((item) => item.selectedOptionIds);
+  const selectedIds = [
+    ...knownFacts.flatMap((fact) => fact.knownOptionIds ?? []),
+    ...history.flatMap((item) => item.selectedOptionIds),
+  ];
   const blockedIds = hardConflictIdsFor(selectedIds);
   // Adaptive routing chooses from every semantically applicable portrait dimension;
   // Journey budgets, not the legacy UI precision tiers, limit how many are asked.
@@ -133,9 +138,10 @@ export function buildAdaptiveTurnSnapshot(input: unknown): AdaptiveTurnSnapshot 
   const broadDimensions = knownFacts
     .filter((fact) => fact.source === "brief" && fact.specificity === "broad" && fact.dimension !== "subject")
     .map((fact) => fact.dimension);
+  const unresolvedDimensions = unresolvedBriefDimensions(subjectBrief);
   const shouldAskUseCase = !exactDimensions.has("use_case")
     && /职业|品牌|公司|团队|头像|封面|宣传|海报/.test(subjectBrief);
-  const questionOrder = [...new Set([...(shouldAskUseCase ? ["use_case"] : []), ...broadDimensions, ...ordered])]
+  const questionOrder = [...new Set([...(shouldAskUseCase ? ["use_case"] : []), ...unresolvedDimensions, ...broadDimensions, ...ordered])]
     .filter((questionId) => !exactDimensions.has(questionId) && !deliverySuppressions.has(questionId));
   const eligibleDimensions = questionOrder
     .filter((questionId) => questionId !== "subject")
@@ -146,6 +152,7 @@ export function buildAdaptiveTurnSnapshot(input: unknown): AdaptiveTurnSnapshot 
       title: dimension.title,
       helper: dimension.helper,
       mode: dimension.mode,
+      maxSelections: dimension.maxSelections,
       pillar: pillarFor(dimension.questionId),
       candidates: dimension.options.filter((option) => !blockedIds.has(option.id)),
     }))

@@ -307,6 +307,13 @@ export function useAgentGuideController() {
           turnTokenRef.current = "turnToken" in turnResult && typeof turnResult.turnToken === "string"
             ? turnResult.turnToken
             : "";
+          const { selections: acceptedSelections, freeTexts: acceptedFreeTexts } = buildRenderInputs(
+            nextHistory,
+            manifest,
+          );
+          setHistory(nextHistory);
+          setSelections(acceptedSelections);
+          setFreeTexts(acceptedFreeTexts);
         }
 
         // Track consecutive fallbacks — if ≥ 2, stop dragging and end
@@ -535,19 +542,21 @@ export function useAgentGuideController() {
     }
     const nextHistory = appendAnswer(history, questionId, picked, text || undefined);
     logAgent("submit", { questionId, selectedOptionIds: picked, freeText: text || undefined });
-    if (picked.length > 0) {
-      const value = selectionValueFor(currentDimension.mode, picked);
-      if (value !== undefined) {
-        setSelections((prev) => ({ ...prev, [questionId]: value }));
+    if (!ADAPTIVE_ROUTING) {
+      if (picked.length > 0) {
+        const value = selectionValueFor(currentDimension.mode, picked);
+        if (value !== undefined) {
+          setSelections((prev) => ({ ...prev, [questionId]: value }));
+        }
       }
+      setFreeTexts((prev) => {
+        const next = { ...prev };
+        if (text) next[questionId] = text;
+        else delete next[questionId];
+        return next;
+      });
+      setHistory(nextHistory);
     }
-    setFreeTexts((prev) => {
-      const next = { ...prev };
-      if (text) next[questionId] = text;
-      else delete next[questionId];
-      return next;
-    });
-    setHistory(nextHistory);
     flushTelemetry("submit"); // checkpoint each answer (captures abandonment too)
     void fetchNext(nextHistory);
   }, [decision, currentDimension, draft, draftText, history, fetchNext, flushTelemetry, primaryType]);
@@ -562,13 +571,15 @@ export function useAgentGuideController() {
         : [];
     logAgent("submit", { questionId, skipped: true, inferredSubjectIds: picked.length ? picked : undefined });
     const nextHistory = appendAnswer(history, questionId, picked);
-    if (picked.length > 0) {
-      const value = selectionValueFor(currentDimension.mode, picked);
-      if (value !== undefined) {
-        setSelections((prev) => ({ ...prev, [questionId]: value }));
+    if (!ADAPTIVE_ROUTING) {
+      if (picked.length > 0) {
+        const value = selectionValueFor(currentDimension.mode, picked);
+        if (value !== undefined) {
+          setSelections((prev) => ({ ...prev, [questionId]: value }));
+        }
       }
+      setHistory(nextHistory);
     }
-    setHistory(nextHistory);
     setDraft([]);
     setDraftText("");
     flushTelemetry("skip");
