@@ -484,7 +484,7 @@ export function useAgentGuideController() {
   /** Leave the describe step (with or without text) and ask the first question. */
   const startWithDescription = useCallback(
     (text: string) => {
-      if (ADAPTIVE_ROUTING && !text.trim()) {
+      if (!BUILTIN_DEMO && ADAPTIVE_ROUTING && !text.trim()) {
         setError("请先描述你想要的人物或角色。");
         return;
       }
@@ -592,9 +592,8 @@ export function useAgentGuideController() {
     const questionId = decision.nextQuestionId;
     if (!questionId) return;
     const serverValidated = BUILTIN_DEMO || ADAPTIVE_ROUTING;
-    const activeAdaptive = BUILTIN_DEMO ? journeyRoute === "adaptive" : ADAPTIVE_ROUTING;
-    let picked = activeAdaptive && text ? [] : draft;
-    if (questionId === "subject" && picked.length === 0 && !(activeAdaptive && text)) {
+    let picked = serverValidated && text ? [] : draft;
+    if (questionId === "subject" && picked.length === 0 && !(serverValidated && text)) {
       picked = inferSubjectOptionIds(descriptionRef.current, primaryType);
     }
     const nextHistory = appendAnswer(history, questionId, picked, text || undefined);
@@ -617,7 +616,7 @@ export function useAgentGuideController() {
     if (serverValidated) pendingHistoryRef.current = nextHistory;
     flushTelemetry("submit"); // checkpoint each answer (captures abandonment too)
     void fetchNext(nextHistory);
-  }, [decision, currentDimension, draft, draftText, history, fetchNext, flushTelemetry, journeyRoute, primaryType]);
+  }, [decision, currentDimension, draft, draftText, history, fetchNext, flushTelemetry, primaryType]);
 
   const skipStep = useCallback(() => {
     if (!decision || !currentDimension) return;
@@ -758,9 +757,7 @@ export function useAgentGuideController() {
     telemetryEnabled,
     setTelemetryEnabled,
     builtinDemo: BUILTIN_DEMO,
-    adaptiveRouting: BUILTIN_DEMO
-      ? journeyRoute === null ? ADAPTIVE_ROUTING : journeyRoute === "adaptive"
-      : ADAPTIVE_ROUTING,
+    adaptiveRouting: BUILTIN_DEMO ? journeyRoute === "adaptive" : ADAPTIVE_ROUTING,
     readKeyFor: (id: string) => readStorage(keyStorageFor(id)),
     saveKeyAndStart,
     startWithDescription,

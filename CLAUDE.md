@@ -69,7 +69,7 @@ Public build-time flags:
 | Var | Purpose |
 |-----|---------|
 | `NEXT_PUBLIC_AGENT_DEMO_BUILTIN=1` | Skip the BYOK key gate and use the built-in key |
-| `NEXT_PUBLIC_ADAPTIVE_ROUTING=1` | BYOK Adaptive routing and pre-first-response UX hint only; Built-in cohort routing is server-owned |
+| `NEXT_PUBLIC_ADAPTIVE_ROUTING=1` | Enable the legacy BYOK Adaptive boundary; Built-in cohort routing is server-owned |
 
 ## Commands / 命令
 

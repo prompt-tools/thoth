@@ -63,6 +63,7 @@ describe("useAgentGuideController Adaptive answer lifecycle", () => {
     const { useAgentGuideController } = await import("./use-agent-guide-controller");
     const { result } = renderHook(() => useAgentGuideController());
 
+    expect(result.current.adaptiveRouting).toBe(false);
     act(() => result.current.startWithDescription("窗边的女学生"));
     await waitFor(() => expect(result.current.decision?.nextQuestionId).toBe("framing"));
 
@@ -236,5 +237,49 @@ describe("useAgentGuideController Built-in Journey routing", () => {
     await waitFor(() => expect(clientMocks.requestJourneyTurn).toHaveBeenCalledTimes(3));
     expect(clientMocks.requestJourneyTurn.mock.calls[2][0]).not.toHaveProperty("journeyId");
     expect(clientMocks.requestJourneyTurn.mock.calls[2][0]).not.toHaveProperty("journeyToken");
+  });
+
+  it("lets fixed-cohort free text atomically override selected cards", async () => {
+    const framingIds = [
+      "image_framing:close_up",
+      "image_framing:medium_shot",
+      "image_framing:wide_shot",
+    ];
+    clientMocks.requestJourneyTurn
+      .mockResolvedValueOnce({
+        journey: { id: "journey-1", route: "fixed", token: "journey-token-1" },
+        decision: { nextQuestionId: "framing", visibleOptionIds: framingIds, done: false },
+        diagnostics: { source: "ordered", fallbackUsed: false },
+      })
+      .mockResolvedValueOnce({
+        journey: { id: "journey-1", route: "fixed", token: "journey-token-2" },
+        decision: {
+          nextQuestionId: "camera",
+          visibleOptionIds: [
+            "image_camera:35mm_wide",
+            "image_camera:50mm_standard",
+            "image_camera:85mm_portrait",
+          ],
+          done: false,
+        },
+        diagnostics: { source: "ordered", fallbackUsed: false },
+      });
+    const { useAgentGuideController } = await import("./use-agent-guide-controller");
+    const { result } = renderHook(() => useAgentGuideController());
+
+    act(() => result.current.startWithDescription("窗边的女学生"));
+    await waitFor(() => expect(result.current.decision?.nextQuestionId).toBe("framing"));
+    act(() => result.current.toggleDraft(framingIds[0]));
+    act(() => result.current.setDraftText("人物占画面三分之一，保留窗景"));
+    act(() => result.current.submitStep());
+    await waitFor(() => expect(result.current.decision?.nextQuestionId).toBe("camera"));
+
+    expect(clientMocks.requestJourneyTurn.mock.calls[1][0]).toMatchObject({
+      history: [{
+        questionId: "framing",
+        selectedOptionIds: [],
+        freeText: "人物占画面三分之一，保留窗景",
+      }],
+    });
   });
 });

@@ -188,8 +188,8 @@ describe("Built-in Journey HTTP boundary", () => {
     }
   });
 
-  it.each(["10", "50"])("assigns repeatable cohorts at %s percent exposure", async (exposure) => {
-    const run = async () => {
+  it("applies the 10 and 50 percent thresholds to the same release and Journey ID", async () => {
+    const run = async (exposure: "10" | "50") => {
       const response = await handleJourneyTurnRequest(request({
         subjectBrief: "原创游侠角色",
         history: [],
@@ -200,14 +200,15 @@ describe("Built-in Journey HTTP boundary", () => {
         exposure,
         demoKey: "server-key",
         now: () => 1_700_000_000_000,
-        newJourneyId: () => "repeatable-journey",
+        newJourneyId: () => "journey-0",
         fixedTransport: async () => ({}),
         adaptiveExchange: async () => ({ kind: "network", reason: "network_error" }),
       });
       return response.json() as Promise<{ journey: { route: string } }>;
     };
 
-    expect((await run()).journey.route).toBe((await run()).journey.route);
+    expect((await run("10")).journey.route).toBe("fixed");
+    expect((await run("50")).journey.route).toBe("adaptive");
   });
 
   it("rejects unsupported exposure before either provider path", async () => {
