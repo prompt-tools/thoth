@@ -19,6 +19,7 @@ import {
   AdaptiveRouteError,
   parseAdaptiveRouteSuccess,
 } from "./adaptive-browser-projection";
+import type { ProviderAttemptLifecycle } from "./attempt-lifecycle";
 
 const ANTHROPIC_VERSION = "2023-06-01";
 const PROXY_URL = "/api/llm";
@@ -42,6 +43,31 @@ export interface ProxyRequest {
   endpoint: string;
   headers: Record<string, string>;
   body: unknown;
+}
+
+export class ProviderTransportError extends Error {
+  constructor(
+    readonly failureCode: string,
+    readonly providerStatus?: number,
+  ) {
+    super(failureCode);
+    this.name = "ProviderTransportError";
+  }
+}
+
+function fixedFailure(error: unknown): {
+  outcome: "failure";
+  failureCode: string;
+  providerStatus?: number;
+} {
+  if (error instanceof ProviderTransportError) {
+    return {
+      outcome: "failure",
+      failureCode: error.failureCode,
+      ...(error.providerStatus === undefined ? {} : { providerStatus: error.providerStatus }),
+    };
+  }
+  return { outcome: "failure", failureCode: "network_error" };
 }
 
 /** Forward a provider-shaped request through our server-side proxy (avoids
@@ -386,7 +412,7 @@ export async function runAgentTurn(
   apiKey: string,
   args: { manifest: CatalogManifest; history: AgentHistoryItem[]; userDescription?: string; precision?: Precision },
   transport: (req: ProxyRequest) => Promise<unknown> = callProxy,
-  opts: { maxCorrectionRetries?: number } = {}
+  opts: { maxCorrectionRetries?: number; attemptLifecycle?: ProviderAttemptLifecycle } = {}
 ): Promise<{ decision: AgentDecision; ctx: TurnContext; diagnostics: TurnDiagnostics }> {
   const { proxyReq, ctx } = buildTurnRequest(provider, apiKey, args);
 
@@ -414,15 +440,19 @@ export async function runAgentTurn(
 
   // Call transport — retry on network errors only
   let resp: unknown;
+  let acceptedAttempt: Awaited<ReturnType<ProviderAttemptLifecycle["start"]>> | undefined;
   let attempts = 0;
   const maxRetries = opts.maxCorrectionRetries ?? 2;
 
   for (let t = 0; t <= maxRetries; t++) {
     attempts = t + 1;
+    const attempt = await opts.attemptLifecycle?.start();
     try {
       resp = await transport(proxyReq);
+      acceptedAttempt = attempt;
       break;
-    } catch {
+    } catch (error) {
+      if (attempt) await opts.attemptLifecycle!.finish(attempt, fixedFailure(error));
       if (t === maxRetries) {
         // All retries exhausted → fallback: use the pre-filtered option set
         // (respects category pre-filtering; avoids showing out-of-category options)
@@ -458,6 +488,14 @@ export async function runAgentTurn(
   }
 
   const parsed = parseTurnResponse(provider, resp!, ctx);
+  const usage = extractUsage(resp!);
+  if (acceptedAttempt) {
+    await opts.attemptLifecycle!.finish(acceptedAttempt, {
+      outcome: "success",
+      validation: parsed.decision?.done ? "completion" : "ask",
+      ...(usage === undefined ? {} : { usage }),
+    });
+  }
 
   return {
     decision: parsed.decision!,
@@ -473,7 +511,7 @@ export async function runAgentTurn(
       fallbackUsed: false,
       source: "ordered",
       tier: ctx.tier,
-      usage: extractUsage(resp!),
+      usage,
     },
   };
 }

@@ -12,6 +12,7 @@ import {
   issueAcceptedAskToken,
   verifySubmittedTurnState,
 } from "./adaptive-turn-state";
+import type { ProviderAttemptLifecycle } from "./attempt-lifecycle";
 
 export interface AdaptiveProviderRequest {
   endpoint: string;
@@ -32,7 +33,7 @@ export type AdaptiveProviderOutcome =
     }
   | {
       kind: "network";
-      reason: "adaptive_turn_timeout" | "network_error";
+      reason: "adaptive_turn_timeout" | "provider_cancelled" | "network_error";
     };
 
 export interface AdaptiveTurnEvidence {
@@ -50,6 +51,7 @@ export interface AdaptiveTurnRuntimeDeps {
   now: () => number;
   exchange: (request: AdaptiveProviderRequest) => Promise<AdaptiveProviderOutcome>;
   onEvidence?: (evidence: AdaptiveTurnEvidence) => void;
+  attemptLifecycle?: ProviderAttemptLifecycle;
 }
 
 function json(data: unknown, status = 200): Response {
@@ -75,6 +77,17 @@ function providerEvidence(raw: unknown): Pick<AdaptiveTurnEvidence, "finishReaso
     finishReason: choice?.finish_reason,
     toolArgumentsRaw: choice?.message?.tool_calls?.[0]?.function?.arguments,
   };
+}
+
+function providerUsage(raw: unknown): { promptTokens?: number; completionTokens?: number } | undefined {
+  const usage = (raw as {
+    usage?: { prompt_tokens?: unknown; completion_tokens?: unknown };
+  })?.usage;
+  if (!usage) return undefined;
+  const promptTokens = typeof usage.prompt_tokens === "number" ? usage.prompt_tokens : undefined;
+  const completionTokens = typeof usage.completion_tokens === "number" ? usage.completion_tokens : undefined;
+  if (promptTokens === undefined && completionTokens === undefined) return undefined;
+  return { promptTokens, completionTokens };
 }
 
 function withTurnState(
@@ -169,6 +182,7 @@ export async function handleAdaptiveTurnRequest(
       return json({ error: "request_too_large" }, 413);
     }
 
+    const attempt = await deps.attemptLifecycle?.start();
     let outcome: AdaptiveProviderOutcome;
     try {
       outcome = await Promise.race([
@@ -187,17 +201,36 @@ export async function handleAdaptiveTurnRequest(
       ]);
     } catch (error) {
       const reason = timedOut || error === timeoutError ? "adaptive_turn_timeout" : "network_error";
+      if (attempt) {
+        await deps.attemptLifecycle!.finish(attempt, {
+          outcome: "failure",
+          failureCode: reason,
+        });
+      }
       emitEvidence(deps, { failureCode: reason });
       return json(withTurnState(fallbackAdaptiveTurn(snapshot, reason), snapshot, turnSecret, now));
     }
 
     if (outcome.kind === "network") {
+      if (attempt) {
+        await deps.attemptLifecycle!.finish(attempt, {
+          outcome: "failure",
+          failureCode: outcome.reason,
+        });
+      }
       emitEvidence(deps, { failureCode: outcome.reason });
       return json(withTurnState(fallbackAdaptiveTurn(snapshot, outcome.reason), snapshot, turnSecret, now));
     }
 
     const baseEvidence = { providerStatus: outcome.status, rawBody: outcome.body };
     if (outcome.bodyTooLarge || outcome.body.byteLength > ADAPTIVE_MAX_BYTES) {
+      if (attempt) {
+        await deps.attemptLifecycle!.finish(attempt, {
+          outcome: "failure",
+          failureCode: "response_too_large",
+          providerStatus: outcome.status,
+        });
+      }
       emitEvidence(deps, { ...baseEvidence, failureCode: "response_too_large" });
       return json(withTurnState(
         fallbackAdaptiveTurn(snapshot, "response_too_large"),
@@ -208,6 +241,13 @@ export async function handleAdaptiveTurnRequest(
     }
     if (outcome.status < 200 || outcome.status >= 300) {
       const reason = `http_${outcome.status}`;
+      if (attempt) {
+        await deps.attemptLifecycle!.finish(attempt, {
+          outcome: "failure",
+          failureCode: reason,
+          providerStatus: outcome.status,
+        });
+      }
       emitEvidence(deps, { ...baseEvidence, failureCode: reason });
       return json(withTurnState(fallbackAdaptiveTurn(snapshot, reason), snapshot, turnSecret, now));
     }
@@ -216,10 +256,33 @@ export async function handleAdaptiveTurnRequest(
     try {
       raw = JSON.parse(new TextDecoder().decode(outcome.body));
     } catch {
+      if (attempt) {
+        await deps.attemptLifecycle!.finish(attempt, {
+          outcome: "failure",
+          failureCode: "invalid_json",
+          providerStatus: outcome.status,
+        });
+      }
       emitEvidence(deps, { ...baseEvidence, failureCode: "invalid_json" });
       return json(withTurnState(fallbackAdaptiveTurn(snapshot, "invalid_json"), snapshot, turnSecret, now));
     }
     const result = normalizeAdaptiveResponse(raw, snapshot);
+    if (attempt) {
+      if (result.diagnostics.source === "fallback") {
+        await deps.attemptLifecycle!.finish(attempt, {
+          outcome: "failure",
+          failureCode: result.diagnostics.reason ?? "invalid_response",
+          providerStatus: outcome.status,
+        });
+      } else {
+        const usage = providerUsage(raw);
+        await deps.attemptLifecycle!.finish(attempt, {
+          outcome: "success",
+          validation: result.decision.done ? "completion" : "ask",
+          ...(usage === undefined ? {} : { usage }),
+        });
+      }
+    }
     emitEvidence(deps, {
       ...baseEvidence,
       ...providerEvidence(raw),
