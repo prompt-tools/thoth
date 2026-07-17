@@ -28,6 +28,7 @@ export type AdaptiveProviderOutcome =
       status: number;
       headers: Record<string, string>;
       body: Uint8Array;
+      bodyTooLarge?: boolean;
     }
   | {
       kind: "network";
@@ -196,7 +197,7 @@ export async function handleAdaptiveTurnRequest(
     }
 
     const baseEvidence = { providerStatus: outcome.status, rawBody: outcome.body };
-    if (outcome.body.byteLength > ADAPTIVE_MAX_BYTES) {
+    if (outcome.bodyTooLarge || outcome.body.byteLength > ADAPTIVE_MAX_BYTES) {
       emitEvidence(deps, { ...baseEvidence, failureCode: "response_too_large" });
       return json(withTurnState(
         fallbackAdaptiveTurn(snapshot, "response_too_large"),

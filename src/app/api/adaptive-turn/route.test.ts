@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildCatalogManifest } from "@/lib/prompt/agent/catalog-manifest";
+import { ADAPTIVE_MAX_BYTES } from "@/lib/prompt/agent/adaptive-turn";
 import { issueAcceptedAskToken } from "@/lib/prompt/agent/adaptive-turn-state";
 import { POST } from "./route";
 
@@ -526,5 +527,46 @@ describe("POST /api/adaptive-turn", () => {
       budget: { class: "sparse", limit: 10, used: 1, remaining: 9 },
       history: [{ questionId: "scene", selectedOptionIds: [shownIds[0]] }],
     });
+  });
+
+  it("caps the live provider stream without calling arrayBuffer", async () => {
+    vi.stubEnv("ADAPTIVE_ROUTING_ENABLED", "1");
+    vi.stubEnv("DEMO_DEEPSEEK_KEY", "server-key");
+    vi.stubEnv("ADAPTIVE_TURN_SECRET", TURN_SECRET);
+
+    const reader = {
+      read: vi.fn().mockResolvedValue({
+        done: false,
+        value: new Uint8Array(ADAPTIVE_MAX_BYTES + 1).fill(120),
+      }),
+      cancel: vi.fn().mockResolvedValue(undefined),
+      releaseLock: vi.fn(),
+    };
+    const upstream = {
+      status: 200,
+      headers: new Headers(),
+      body: { getReader: () => reader },
+      arrayBuffer: vi.fn().mockRejectedValue(new Error("arrayBuffer must not be called")),
+    } as unknown as Response;
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(upstream));
+
+    const response = await POST(new Request("http://localhost/api/adaptive-turn", {
+      method: "POST",
+      headers: { authorization: "Bearer __demo__", "content-type": "application/json" },
+      body: JSON.stringify({
+        subjectBrief: "原创游侠角色",
+        history: [],
+        precision: "simple",
+      }),
+    }));
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      diagnostics: { source: "fallback", reason: "response_too_large" },
+    });
+    expect(reader.read).toHaveBeenCalledTimes(1);
+    expect(reader.cancel).toHaveBeenCalledTimes(1);
+    expect(reader.releaseLock).toHaveBeenCalledTimes(1);
+    expect(upstream.arrayBuffer).not.toHaveBeenCalled();
   });
 });
