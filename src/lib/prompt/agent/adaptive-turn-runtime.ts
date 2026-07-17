@@ -84,8 +84,11 @@ function providerUsage(raw: unknown): { promptTokens?: number; completionTokens?
     usage?: { prompt_tokens?: unknown; completion_tokens?: unknown };
   })?.usage;
   if (!usage) return undefined;
-  const promptTokens = typeof usage.prompt_tokens === "number" ? usage.prompt_tokens : undefined;
-  const completionTokens = typeof usage.completion_tokens === "number" ? usage.completion_tokens : undefined;
+  const tokenCount = (value: unknown): number | undefined => (
+    typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : undefined
+  );
+  const promptTokens = tokenCount(usage.prompt_tokens);
+  const completionTokens = tokenCount(usage.completion_tokens);
   if (promptTokens === undefined && completionTokens === undefined) return undefined;
   return { promptTokens, completionTokens };
 }
@@ -133,6 +136,13 @@ export async function handleAdaptiveTurnRequest(
 
   const now = deps.now();
   const controller = new AbortController();
+  let callerCancelled = request.signal.aborted;
+  const abortFromCaller = () => {
+    callerCancelled = true;
+    controller.abort();
+  };
+  if (callerCancelled) controller.abort();
+  else request.signal.addEventListener("abort", abortFromCaller, { once: true });
   const timeoutError = new Error("adaptive_turn_timeout");
   let timedOut = false;
   let timer: ReturnType<typeof setTimeout>;
@@ -200,7 +210,9 @@ export async function handleAdaptiveTurnRequest(
         deadline,
       ]);
     } catch (error) {
-      const reason = timedOut || error === timeoutError ? "adaptive_turn_timeout" : "network_error";
+      const reason = timedOut || error === timeoutError
+        ? "adaptive_turn_timeout"
+        : callerCancelled ? "provider_cancelled" : "network_error";
       if (attempt) {
         await deps.attemptLifecycle!.finish(attempt, {
           outcome: "failure",
@@ -291,5 +303,6 @@ export async function handleAdaptiveTurnRequest(
     return json(withTurnState(result, snapshot, turnSecret, now));
   } finally {
     clearTimeout(timer!);
+    request.signal.removeEventListener("abort", abortFromCaller);
   }
 }

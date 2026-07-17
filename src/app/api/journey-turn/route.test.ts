@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { POST } from "./route";
+import { buildAdaptiveTurnSnapshot } from "@/lib/prompt/agent/adaptive-turn";
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
 });
@@ -148,5 +150,213 @@ describe("POST /api/journey-turn", () => {
       failureCode: "http_503",
       providerStatus: 503,
     })));
+  });
+
+  it("propagates caller cancellation to the fixed provider and records one cancelled attempt", async () => {
+    vi.stubEnv("ADAPTIVE_TURN_SECRET", "a-strong-test-secret-with-at-least-32-bytes");
+    vi.stubEnv("JOURNEY_RELEASE", "release-a");
+    vi.stubEnv("ADAPTIVE_CANARY_EXPOSURE", "0");
+    vi.stubEnv("DEMO_DEEPSEEK_KEY", "server-key");
+    vi.stubEnv("UPSTASH_REDIS_REST_URL", "https://example.upstash.io");
+    vi.stubEnv("UPSTASH_REDIS_REST_TOKEN", "redis-token");
+    const caller = new AbortController();
+    const providerSignals: AbortSignal[] = [];
+    const terminals: Array<Record<string, unknown>> = [];
+    const fetchSpy = vi.fn().mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === "https://example.upstash.io") {
+        const command = JSON.parse(String(init?.body)) as string[];
+        if (command[1].includes("PEXPIREAT")) return Response.json({ result: "created" });
+        terminals.push(JSON.parse(command[4]) as Record<string, unknown>);
+        return Response.json({ result: "written" });
+      }
+      const providerSignal = init?.signal as AbortSignal;
+      providerSignals.push(providerSignal);
+      if (caller.signal.aborted) return new Response("caller cancelled", { status: 503 });
+      return new Promise<Response>((resolve, reject) => {
+        providerSignal.addEventListener("abort", () => {
+          reject(new DOMException("aborted", "AbortError"));
+        }, { once: true });
+        caller.signal.addEventListener("abort", () => {
+          resolve(new Response("caller cancelled", { status: 503 }));
+        }, { once: true });
+      });
+    });
+    vi.stubGlobal("fetch", fetchSpy);
+    const responsePromise = POST(new Request("http://localhost/api/journey-turn", {
+      method: "POST",
+      headers: { authorization: "Bearer __demo__", "content-type": "application/json" },
+      body: JSON.stringify({ subjectBrief: "原创游侠角色", history: [], precision: "simple" }),
+      signal: caller.signal,
+    }));
+
+    await vi.waitFor(() => expect(providerSignals).toHaveLength(1));
+    caller.abort();
+    const response = await responsePromise;
+
+    expect(response.status).toBe(200);
+    expect(providerSignals[0].aborted).toBe(true);
+    expect(providerSignals).toHaveLength(1);
+    expect(terminals).toEqual([expect.objectContaining({
+      outcome: "failure",
+      failureCode: "provider_cancelled",
+    })]);
+  });
+
+  it("records an Adaptive production call from Started through validated Ask", async () => {
+    vi.stubEnv("ADAPTIVE_TURN_SECRET", "a-strong-test-secret-with-at-least-32-bytes");
+    vi.stubEnv("JOURNEY_RELEASE", "release-a");
+    vi.stubEnv("ADAPTIVE_ROUTING_ENABLED", "1");
+    vi.stubEnv("ADAPTIVE_CANARY_EXPOSURE", "100");
+    vi.stubEnv("DEMO_DEEPSEEK_KEY", "server-key");
+    vi.stubEnv("UPSTASH_REDIS_REST_URL", "https://example.upstash.io");
+    vi.stubEnv("UPSTASH_REDIS_REST_TOKEN", "redis-token");
+    const snapshot = buildAdaptiveTurnSnapshot({
+      subjectBrief: "原创游侠角色",
+      history: [],
+      precision: "simple",
+    });
+    const dimension = snapshot.eligibleDimensions[0];
+    const events: string[] = [];
+    const terminals: Array<Record<string, unknown>> = [];
+    const fetchSpy = vi.fn().mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === "https://example.upstash.io") {
+        const command = JSON.parse(String(init?.body)) as string[];
+        if (command[1].includes("PEXPIREAT")) {
+          events.push("started");
+          return Response.json({ result: "created" });
+        }
+        events.push("terminal");
+        terminals.push(JSON.parse(command[4]) as Record<string, unknown>);
+        return Response.json({ result: "written" });
+      }
+      events.push("provider");
+      return new Response(JSON.stringify({
+        choices: [{
+          finish_reason: "tool_calls",
+          message: { tool_calls: [{ function: {
+            name: "decide_adaptive_turn",
+            arguments: JSON.stringify({
+              done: false,
+              nextQuestionId: dimension.questionId,
+              questionText: dimension.title,
+              helperText: dimension.helper,
+              optionIds: dimension.candidates.slice(0, 3).map((option) => option.id),
+            }),
+          } }] },
+        }],
+      }), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const response = await POST(new Request("http://localhost/api/journey-turn", {
+      method: "POST",
+      headers: { authorization: "Bearer __demo__", "content-type": "application/json" },
+      body: JSON.stringify({ subjectBrief: "原创游侠角色", history: [], precision: "simple" }),
+    }));
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ journey: { route: "adaptive" } });
+    expect(events).toEqual(["started", "provider", "terminal"]);
+    expect(terminals).toEqual([expect.objectContaining({
+      outcome: "success",
+      validation: "ask",
+    })]);
+  });
+
+  it("propagates caller cancellation through the Adaptive production exchange", async () => {
+    vi.stubEnv("ADAPTIVE_TURN_SECRET", "a-strong-test-secret-with-at-least-32-bytes");
+    vi.stubEnv("JOURNEY_RELEASE", "release-a");
+    vi.stubEnv("ADAPTIVE_ROUTING_ENABLED", "1");
+    vi.stubEnv("ADAPTIVE_CANARY_EXPOSURE", "100");
+    vi.stubEnv("DEMO_DEEPSEEK_KEY", "server-key");
+    vi.stubEnv("UPSTASH_REDIS_REST_URL", "https://example.upstash.io");
+    vi.stubEnv("UPSTASH_REDIS_REST_TOKEN", "redis-token");
+    const caller = new AbortController();
+    let providerSignal: AbortSignal | undefined;
+    const terminals: Array<Record<string, unknown>> = [];
+    const fetchSpy = vi.fn().mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === "https://example.upstash.io") {
+        const command = JSON.parse(String(init?.body)) as string[];
+        if (command[1].includes("PEXPIREAT")) return Response.json({ result: "created" });
+        terminals.push(JSON.parse(command[4]) as Record<string, unknown>);
+        return Response.json({ result: "written" });
+      }
+      providerSignal = init?.signal as AbortSignal;
+      return new Promise<Response>((_resolve, reject) => {
+        providerSignal!.addEventListener("abort", () => {
+          reject(new DOMException("aborted", "AbortError"));
+        }, { once: true });
+      });
+    });
+    vi.stubGlobal("fetch", fetchSpy);
+    const responsePromise = POST(new Request("http://localhost/api/journey-turn", {
+      method: "POST",
+      headers: { authorization: "Bearer __demo__", "content-type": "application/json" },
+      body: JSON.stringify({ subjectBrief: "原创游侠角色", history: [], precision: "simple" }),
+      signal: caller.signal,
+    }));
+
+    await vi.waitFor(() => expect(providerSignal).toBeDefined());
+    caller.abort();
+    const response = await responsePromise;
+
+    expect(response.status).toBe(200);
+    expect(providerSignal?.aborted).toBe(true);
+    expect(terminals).toEqual([expect.objectContaining({
+      outcome: "failure",
+      failureCode: "provider_cancelled",
+    })]);
+  });
+
+  it("records a provider-validated Adaptive Completion at the production boundary", async () => {
+    vi.stubEnv("ADAPTIVE_TURN_SECRET", "a-strong-test-secret-with-at-least-32-bytes");
+    vi.stubEnv("JOURNEY_RELEASE", "release-a");
+    vi.stubEnv("ADAPTIVE_ROUTING_ENABLED", "1");
+    vi.stubEnv("ADAPTIVE_CANARY_EXPOSURE", "100");
+    vi.stubEnv("DEMO_DEEPSEEK_KEY", "server-key");
+    vi.stubEnv("UPSTASH_REDIS_REST_URL", "https://example.upstash.io");
+    vi.stubEnv("UPSTASH_REDIS_REST_TOKEN", "redis-token");
+    const terminals: Array<Record<string, unknown>> = [];
+    const fetchSpy = vi.fn().mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === "https://example.upstash.io") {
+        const command = JSON.parse(String(init?.body)) as string[];
+        if (command[1].includes("PEXPIREAT")) return Response.json({ result: "created" });
+        terminals.push(JSON.parse(command[4]) as Record<string, unknown>);
+        return Response.json({ result: "written" });
+      }
+      return new Response(JSON.stringify({
+        choices: [{
+          finish_reason: "tool_calls",
+          message: { tool_calls: [{ function: {
+            name: "decide_adaptive_turn",
+            arguments: JSON.stringify({
+              done: true,
+              nextQuestionId: null,
+              questionText: null,
+              helperText: null,
+              optionIds: [],
+            }),
+          } }] },
+        }],
+      }), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const response = await POST(new Request("http://localhost/api/journey-turn", {
+      method: "POST",
+      headers: { authorization: "Bearer __demo__", "content-type": "application/json" },
+      body: JSON.stringify({
+        subjectBrief: "女船长怒视镜头，低机位，电影海报",
+        history: [],
+        precision: "simple",
+      }),
+    }));
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ decision: { done: true } });
+    expect(terminals).toEqual([expect.objectContaining({
+      outcome: "success",
+      validation: "completion",
+    })]);
   });
 });

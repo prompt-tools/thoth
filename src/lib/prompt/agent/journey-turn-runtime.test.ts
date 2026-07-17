@@ -4,8 +4,10 @@ import {
   handleJourneyTurnRequest,
   type JourneyTurnRuntimeDeps,
 } from "./journey-turn-runtime";
-import { ProviderTransportError } from "./client";
+import { buildTurnRequest, ProviderTransportError } from "./client";
 import { buildAdaptiveTurnSnapshot } from "./adaptive-turn";
+import { buildCatalogManifest } from "./catalog-manifest";
+import { getProvider } from "./providers";
 
 const SECRET = "a-strong-test-secret-with-at-least-32-bytes";
 
@@ -25,6 +27,23 @@ function attemptDeps(): Pick<JourneyTurnRuntimeDeps, "newAttemptId" | "attemptSt
       start: async () => "created",
       finish: async () => "written",
     },
+  };
+}
+
+function fixedModelResponse(subjectBrief = "原创游侠角色") {
+  const { ctx } = buildTurnRequest(getProvider("deepseek"), "server-key", {
+    manifest: buildCatalogManifest(),
+    history: [],
+    userDescription: subjectBrief,
+    precision: "simple",
+  });
+  return {
+    choices: [{
+      message: { tool_calls: [{ function: { arguments: JSON.stringify({
+        visibleOptionIds: ctx.filteredCurrentOptionIds.slice(0, 3),
+        helperText: "选择角色的核心气质。",
+      }) } }] },
+    }],
   };
 }
 
@@ -48,14 +67,7 @@ describe("Built-in Journey HTTP boundary", () => {
     const fixedTransport = vi.fn<JourneyTurnRuntimeDeps["fixedTransport"]>(async () => {
       events.push("provider");
       return {
-        choices: [{
-          message: {
-            tool_calls: [{ function: { arguments: JSON.stringify({
-              visibleOptionIds: ["image_character_archetype:hero"],
-              helperText: "选择角色的核心气质。",
-            }) } }],
-          },
-        }],
+        ...fixedModelResponse("不要把这段主体描述写进 attempt"),
         usage: { prompt_tokens: 20, completion_tokens: 8 },
       };
     });
@@ -127,7 +139,7 @@ describe("Built-in Journey HTTP boundary", () => {
         call += 1;
         if (call === 1) throw new ProviderTransportError("http_503", 503);
         if (call === 2) throw new ProviderTransportError("network_error");
-        return {};
+        return fixedModelResponse();
       },
       adaptiveExchange: vi.fn(),
     });

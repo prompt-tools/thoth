@@ -17,11 +17,9 @@ import {
 } from "./adaptive-turn-runtime";
 import { issueAcceptedAskToken, verifySubmittedTurnState } from "./adaptive-turn-state";
 import {
-  ATTEMPT_RETENTION_MS,
   AttemptLifecycleError,
-  type AttemptRoute,
+  createProviderAttemptLifecycle,
   type AttemptStore,
-  type ProviderAttemptLifecycle,
 } from "./attempt-lifecycle";
 
 export interface JourneyTurnRuntimeDeps {
@@ -35,51 +33,6 @@ export interface JourneyTurnRuntimeDeps {
   attemptStore: AttemptStore;
   fixedTransport: (request: ProxyRequest) => Promise<unknown>;
   adaptiveExchange: AdaptiveTurnRuntimeDeps["exchange"];
-}
-
-function attemptLifecycle(
-  deps: JourneyTurnRuntimeDeps,
-  input: { journeyId: string; release: string; route: AttemptRoute; turn: number },
-): ProviderAttemptLifecycle {
-  return {
-    async start() {
-      const attemptId = deps.newAttemptId();
-      const startedAt = deps.now();
-      let result: Awaited<ReturnType<AttemptStore["start"]>>;
-      try {
-        result = await deps.attemptStore.start({
-          version: 1,
-          attemptId,
-          journeyId: input.journeyId,
-          release: input.release,
-          route: input.route,
-          cohort: input.route,
-          turn: input.turn,
-          startedAt,
-          expiresAt: startedAt + ATTEMPT_RETENTION_MS,
-        });
-      } catch {
-        throw new AttemptLifecycleError("attempt_store_unavailable");
-      }
-      if (result !== "created") throw new AttemptLifecycleError("attempt_id_conflict");
-      return { attemptId, startedAt };
-    },
-    async finish(attempt, terminal) {
-      const endedAt = deps.now();
-      let result: Awaited<ReturnType<AttemptStore["finish"]>>;
-      try {
-        result = await deps.attemptStore.finish(attempt.attemptId, {
-          ...terminal,
-          endedAt,
-          durationMs: Math.max(0, endedAt - attempt.startedAt),
-        });
-      } catch {
-        throw new AttemptLifecycleError("attempt_store_unavailable");
-      }
-      if (result === "conflict") throw new AttemptLifecycleError("attempt_terminal_conflict");
-      if (result === "missing") throw new AttemptLifecycleError("attempt_started_missing");
-    },
-  };
 }
 
 interface JourneyInput {
@@ -213,6 +166,7 @@ export async function handleJourneyTurnRequest(
       adaptiveResponse = await handleAdaptiveTurnRequest(new Request(request.url, {
         method: "POST",
         headers: { authorization: `Bearer ${deps.demoKey}`, "content-type": "application/json" },
+        signal: request.signal,
         body: JSON.stringify({
           subjectBrief: input.subjectBrief,
           history: input.history,
@@ -224,7 +178,10 @@ export async function handleJourneyTurnRequest(
         turnSecret: secret,
         now: () => now,
         exchange: deps.adaptiveExchange,
-        attemptLifecycle: attemptLifecycle(deps, {
+        attemptLifecycle: createProviderAttemptLifecycle({
+          store: deps.attemptStore,
+          newAttemptId: deps.newAttemptId,
+          now: deps.now,
           journeyId,
           release,
           route,
@@ -245,7 +202,10 @@ export async function handleJourneyTurnRequest(
         userDescription: input.subjectBrief,
         precision: input.precision,
       }, deps.fixedTransport, {
-        attemptLifecycle: attemptLifecycle(deps, {
+        attemptLifecycle: createProviderAttemptLifecycle({
+          store: deps.attemptStore,
+          newAttemptId: deps.newAttemptId,
+          now: deps.now,
           journeyId,
           release,
           route,

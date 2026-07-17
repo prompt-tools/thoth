@@ -338,6 +338,27 @@ describe("resolveActiveSet (A1)", () => {
 // ── autoFillDimensions (A4) ─────────────────────────────────────────────
 
 describe("autoFillDimensions (A4)", () => {
+  it("forwards the opaque signed Journey proof without inspecting it", async () => {
+    const history: AgentHistoryItem[] = [
+      { questionId: "subject", selectedOptionIds: ["image_subject:single_person"] },
+    ];
+    const fillSet = computeFillSet("人像", history, manifest);
+    let captured: unknown;
+    await autoFillDimensions(provider, "__demo__", {
+      manifest,
+      history,
+      fillSet,
+      journey: { id: "journey-1", token: "opaque-signed-token" },
+    }, async (request) => {
+      captured = request;
+      return { choices: [{ message: { tool_calls: [] } }] };
+    });
+
+    expect(captured).toMatchObject({
+      journey: { id: "journey-1", token: "opaque-signed-token" },
+    });
+  });
+
   it("returns empty for empty fillSet", async () => {
     const result = await autoFillDimensions(provider, "test-key", {
       manifest,

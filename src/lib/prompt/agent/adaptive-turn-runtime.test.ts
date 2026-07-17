@@ -11,7 +11,7 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-function adaptiveRequest(body: unknown): Request {
+function adaptiveRequest(body: unknown, signal?: AbortSignal): Request {
   return new Request("http://localhost/api/adaptive-turn", {
     method: "POST",
     headers: {
@@ -19,6 +19,7 @@ function adaptiveRequest(body: unknown): Request {
       "content-type": "application/json",
     },
     body: JSON.stringify(body),
+    signal,
   });
 }
 
@@ -107,23 +108,40 @@ describe("handleAdaptiveTurnRequest", () => {
     );
   });
 
-  it("records provider cancellation as a distinct terminal failure", async () => {
+  it("propagates caller cancellation and records it as a distinct terminal failure", async () => {
+    vi.useFakeTimers();
+    const caller = new AbortController();
+    let providerSignal: AbortSignal | undefined;
     const attemptLifecycle = {
       start: vi.fn(async () => ({ attemptId: "attempt-cancelled", startedAt: 1_700_000_000_000 })),
       finish: vi.fn(async () => undefined),
     };
-    await handleAdaptiveTurnRequest(adaptiveRequest({
+    const responsePromise = handleAdaptiveTurnRequest(adaptiveRequest({
       subjectBrief: "原创游侠角色",
       history: [],
       precision: "simple",
-    }), {
+    }, caller.signal), {
       enabled: true,
       turnSecret: TURN_SECRET,
       now: () => 1_700_000_000_000,
       attemptLifecycle,
-      exchange: async () => ({ kind: "network", reason: "provider_cancelled" }),
+      exchange: ({ signal }) => {
+        providerSignal = signal;
+        return new Promise((resolve) => {
+          signal.addEventListener("abort", () => resolve({
+            kind: "network",
+            reason: "provider_cancelled",
+          }), { once: true });
+          setTimeout(() => resolve({ kind: "network", reason: "network_error" }), 1);
+        });
+      },
     });
 
+    await vi.advanceTimersByTimeAsync(0);
+    caller.abort();
+    await vi.advanceTimersByTimeAsync(1);
+    await responsePromise;
+    expect(providerSignal?.aborted).toBe(true);
     expect(attemptLifecycle.finish).toHaveBeenCalledWith(
       expect.any(Object),
       { outcome: "failure", failureCode: "provider_cancelled" },

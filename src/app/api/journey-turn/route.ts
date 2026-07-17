@@ -7,12 +7,19 @@ import { createUpstashAttemptStore } from "@/lib/prompt/agent/upstash-attempt-st
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-async function fixedTransport(request: ProxyRequest): Promise<unknown> {
+async function fixedTransport(request: ProxyRequest, callerSignal?: AbortSignal): Promise<unknown> {
   const serialized = JSON.stringify(request.body);
   if (Buffer.byteLength(serialized, "utf8") > 64 * 1024) {
     throw new ProviderTransportError("request_too_large");
   }
   const controller = new AbortController();
+  let callerCancelled = callerSignal?.aborted ?? false;
+  const abortFromCaller = () => {
+    callerCancelled = true;
+    controller.abort();
+  };
+  if (callerCancelled) controller.abort();
+  else callerSignal?.addEventListener("abort", abortFromCaller, { once: true });
   let timedOut = false;
   const timer = setTimeout(() => {
     timedOut = true;
@@ -30,7 +37,7 @@ async function fixedTransport(request: ProxyRequest): Promise<unknown> {
       });
     } catch (error) {
       if (timedOut) throw new ProviderTransportError("provider_timeout");
-      if (error instanceof DOMException && error.name === "AbortError") {
+      if (callerCancelled || (error instanceof DOMException && error.name === "AbortError")) {
         throw new ProviderTransportError("provider_cancelled");
       }
       throw new ProviderTransportError("network_error");
@@ -44,6 +51,7 @@ async function fixedTransport(request: ProxyRequest): Promise<unknown> {
     }
   } finally {
     clearTimeout(timer);
+    callerSignal?.removeEventListener("abort", abortFromCaller);
   }
 }
 
@@ -62,7 +70,7 @@ export function POST(request: Request): Promise<Response> {
     newJourneyId: () => randomUUID(),
     newAttemptId: () => randomUUID(),
     attemptStore,
-    fixedTransport,
+    fixedTransport: (providerRequest) => fixedTransport(providerRequest, request.signal),
     adaptiveExchange: liveAdaptiveExchange,
   });
 }

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import "../init";
-import { buildTurnRequest, parseTurnResponse, requestAdaptiveTurn, runAgentTurn } from "./client";
+import { buildTurnRequest, extractUsage, parseTurnResponse, requestAdaptiveTurn, runAgentTurn } from "./client";
 import { buildCatalogManifest } from "./catalog-manifest";
 import type { AgentHistoryItem } from "./decision";
 import { activeDimensions } from "./active-dimensions";
@@ -56,6 +56,41 @@ describe("buildTurnRequest (C-9b gradient)", () => {
 });
 
 describe("runAgentTurn (C-9b gradient)", () => {
+  it("never treats provider-controlled non-numeric usage as telemetry", () => {
+    expect(extractUsage({
+      usage: {
+        prompt_tokens: { raw: "SUBJECT_CONTENT" },
+        completion_tokens: "TOOL_ARGUMENTS",
+      },
+    })).toBeUndefined();
+    expect(extractUsage({
+      usage: { prompt_tokens: -1, completion_tokens: Number.POSITIVE_INFINITY },
+    })).toBeUndefined();
+  });
+
+  it("records malformed fixed tool output as validation failure while preserving the safe UI fallback", async () => {
+    const finish = vi.fn(async () => undefined);
+    const { decision } = await runAgentTurn(
+      provider,
+      "test-key",
+      { manifest, history: [], userDescription: "" },
+      async () => ({}),
+      {
+        attemptLifecycle: {
+          start: async () => ({ attemptId: "attempt-invalid", startedAt: 1 }),
+          finish,
+        },
+      },
+    );
+
+    expect(decision.done).toBe(false);
+    expect(decision.visibleOptionIds.length).toBeGreaterThan(0);
+    expect(finish).toHaveBeenCalledWith(
+      expect.any(Object),
+      { outcome: "failure", failureCode: "validation_no_valid_options" },
+    );
+  });
+
   // ① pool = activeDimensions, nextQuestionId = ordered[0]
   it("① nextQuestionId === ordered[0]", async () => {
     const dim = manifest.find((d) => d.questionId === "subject")!;

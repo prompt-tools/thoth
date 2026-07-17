@@ -43,6 +43,7 @@ export interface ProxyRequest {
   endpoint: string;
   headers: Record<string, string>;
   body: unknown;
+  journey?: { id: string; token: string };
 }
 
 export class ProviderTransportError extends Error {
@@ -121,14 +122,17 @@ export function extractUsage(
   const usage = (resp as { usage?: unknown })?.usage;
   if (!usage || typeof usage !== "object") return undefined;
   const u = usage as {
-    prompt_tokens?: number;
-    completion_tokens?: number;
-    input_tokens?: number;
-    output_tokens?: number;
+    prompt_tokens?: unknown;
+    completion_tokens?: unknown;
+    input_tokens?: unknown;
+    output_tokens?: unknown;
   };
-  const promptTokens = u.prompt_tokens ?? u.input_tokens;
-  const completionTokens = u.completion_tokens ?? u.output_tokens;
-  if (promptTokens == null && completionTokens == null) return undefined;
+  const tokenCount = (value: unknown): number | undefined => (
+    typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : undefined
+  );
+  const promptTokens = tokenCount(u.prompt_tokens ?? u.input_tokens);
+  const completionTokens = tokenCount(u.completion_tokens ?? u.output_tokens);
+  if (promptTokens === undefined && completionTokens === undefined) return undefined;
   return { promptTokens, completionTokens };
 }
 
@@ -339,6 +343,7 @@ export function parseTurnResponse(
   rawDone: boolean;
   droppedInvalidOptionIds: string[];
   attemptedTierJump: boolean;
+  validationFailureCode?: "validation_no_valid_options";
 } {
   const rawInput = extractToolInput(provider, rawResp, "select_options");
 
@@ -380,7 +385,17 @@ export function parseTurnResponse(
     ...(helperText ? { helperText } : {}),
   };
 
-  return { rawInput, decision, rawNextQuestionId, rawDone, droppedInvalidOptionIds, attemptedTierJump: false };
+  return {
+    rawInput,
+    decision,
+    rawNextQuestionId,
+    rawDone,
+    droppedInvalidOptionIds,
+    attemptedTierJump: false,
+    ...(validOptionIds.length === 0
+      ? { validationFailureCode: "validation_no_valid_options" as const }
+      : {}),
+  };
 }
 
 export interface TurnContext {
@@ -453,7 +468,8 @@ export async function runAgentTurn(
       break;
     } catch (error) {
       if (attempt) await opts.attemptLifecycle!.finish(attempt, fixedFailure(error));
-      if (t === maxRetries) {
+      if (t === maxRetries
+        || (error instanceof ProviderTransportError && error.failureCode === "provider_cancelled")) {
         // All retries exhausted → fallback: use the pre-filtered option set
         // (respects category pre-filtering; avoids showing out-of-category options)
         const currentDim = ctx.pool[0];
@@ -490,11 +506,13 @@ export async function runAgentTurn(
   const parsed = parseTurnResponse(provider, resp!, ctx);
   const usage = extractUsage(resp!);
   if (acceptedAttempt) {
-    await opts.attemptLifecycle!.finish(acceptedAttempt, {
-      outcome: "success",
-      validation: parsed.decision?.done ? "completion" : "ask",
-      ...(usage === undefined ? {} : { usage }),
-    });
+    await opts.attemptLifecycle!.finish(acceptedAttempt, parsed.validationFailureCode
+      ? { outcome: "failure", failureCode: parsed.validationFailureCode }
+      : {
+          outcome: "success",
+          validation: parsed.decision?.done ? "completion" : "ask",
+          ...(usage === undefined ? {} : { usage }),
+        });
   }
 
   return {
@@ -677,17 +695,20 @@ export async function requestJourneyTurn(
 export async function polishPrompt(
   provider: ProviderPreset,
   apiKey: string,
-  args: { zhPrompt: string; enPrompt: string }
+  args: { zhPrompt: string; enPrompt: string; journey?: { id: string; token: string } }
 ): Promise<{ zh: string; en: string }> {
   const resp = await callProxy(
-    buildToolRequest(provider, apiKey, {
-      model: provider.polishModel,
-      maxTokens: provider.maxTokens ?? 1024,
-      systemText:
-        "你是提示词润色助手。只优化措辞与连贯度，严禁新增、删除或改变用户已选的任何画面元素与语义。保持中英两版一致。",
-      userText: `请分别润色以下两版提示词：\n\n中文：${args.zhPrompt}\n\nEnglish：${args.enPrompt}`,
-      tool: POLISH_TOOL,
-    })
+    {
+      ...buildToolRequest(provider, apiKey, {
+        model: provider.polishModel,
+        maxTokens: provider.maxTokens ?? 1024,
+        systemText:
+          "你是提示词润色助手。只优化措辞与连贯度，严禁新增、删除或改变用户已选的任何画面元素与语义。保持中英两版一致。",
+        userText: `请分别润色以下两版提示词：\n\n中文：${args.zhPrompt}\n\nEnglish：${args.enPrompt}`,
+        tool: POLISH_TOOL,
+      }),
+      ...(args.journey === undefined ? {} : { journey: args.journey }),
+    }
   );
 
   const input = extractToolInput(provider, resp, POLISH_TOOL.name) as
@@ -755,6 +776,7 @@ export async function autoFillDimensions(
     history: AgentHistoryItem[];
     fillSet: string[];
     userDescription?: string;
+    journey?: { id: string; token: string };
   },
   transport: (req: ProxyRequest) => Promise<unknown> = callProxy,
 ): Promise<AutoFillResult[]> {
@@ -866,13 +888,16 @@ export async function autoFillDimensions(
     const userText = `用户已选：\n${userPicksDesc || "（无）"}\n\n待补全维度：\n${dimsDesc}`;
 
     // ── LLM call (one retry when tool output is empty — helps slow providers) ──
-    const proxyReq = buildToolRequest(provider, apiKey, {
-      model: provider.routingModel,
-      maxTokens: provider.maxTokens ?? 512,
-      systemText,
-      userText,
-      tool: FILL_TOOL,
-    });
+    const proxyReq: ProxyRequest = {
+      ...buildToolRequest(provider, apiKey, {
+        model: provider.routingModel,
+        maxTokens: provider.maxTokens ?? 512,
+        systemText,
+        userText,
+        tool: FILL_TOOL,
+      }),
+      ...(args.journey === undefined ? {} : { journey: args.journey }),
+    };
 
     let results: AutoFillResult[] = [];
     for (let attempt = 0; attempt < 2; attempt++) {
