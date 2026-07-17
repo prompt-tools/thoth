@@ -57,9 +57,11 @@ Server-only env vars (never `NEXT_PUBLIC_`, never in the browser bundle):
 
 | Var | Purpose |
 |-----|---------|
-| `DEMO_DEEPSEEK_KEY` | Built-in model key injected by `/api/llm` (api.deepseek.com only) |
-| `ADAPTIVE_TURN_SECRET` | HMAC secret of at least 32 UTF-8 bytes, binding every Adaptive answer to the previously accepted Ask |
-| `ADAPTIVE_ROUTING_ENABLED=1` | Enable the server Adaptive turn boundary; absent keeps the fixed route |
+| `DEMO_DEEPSEEK_KEY` | Built-in model key used only from server provider boundaries |
+| `ADAPTIVE_TURN_SECRET` | HMAC secret of at least 32 UTF-8 bytes, signing Journey and accepted-Ask state |
+| `JOURNEY_RELEASE` | Stable release identifier used in signed Journey claims and Canary assignment; falls back to `VERCEL_GIT_COMMIT_SHA`, then `local` |
+| `ADAPTIVE_CANARY_EXPOSURE=0|10|50|100` | Percentage of new Built-in Journeys assigned to Adaptive; defaults to `0` |
+| `ADAPTIVE_ROUTING_ENABLED=1` | Allow non-zero Adaptive exposure and the legacy BYOK Adaptive boundary; absent forces new Built-in Journeys to fixed |
 | `LANGFUSE_BASE_URL` / `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` | Telemetry sink; absent → telemetry is a no-op |
 
 Public build-time flags:
@@ -67,7 +69,7 @@ Public build-time flags:
 | Var | Purpose |
 |-----|---------|
 | `NEXT_PUBLIC_AGENT_DEMO_BUILTIN=1` | Skip the BYOK key gate and use the built-in key |
-| `NEXT_PUBLIC_ADAPTIVE_ROUTING=1` | Send browser turns through the Adaptive boundary |
+| `NEXT_PUBLIC_ADAPTIVE_ROUTING=1` | BYOK Adaptive routing and pre-first-response UX hint only; Built-in cohort routing is server-owned |
 
 ## Commands / 命令
 

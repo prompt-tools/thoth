@@ -14,6 +14,7 @@ import { GRADIENT } from "./gradient";
 import { conflictIdsFor, suggestedIdsFor } from "./audit-model";
 import { heuristicFillGaps, missingPortraitCoreFill } from "./fill";
 import type { AdaptiveTurnResult } from "./adaptive-turn";
+import type { JourneyRoute } from "./journey-state";
 import {
   AdaptiveRouteError,
   parseAdaptiveRouteSuccess,
@@ -562,6 +563,77 @@ export async function requestAdaptiveTurn(
     );
   }
   return parseAdaptiveRouteSuccess(payload);
+}
+
+export interface JourneyTurnResult {
+  journey: { id: string; route: JourneyRoute; token: string };
+  decision: AgentDecision;
+  diagnostics: TurnDiagnostics | AdaptiveTurnResult["diagnostics"];
+}
+
+/** Built-in demo guide boundary. The server assigns and signs the route; the
+ * browser only carries the latest opaque Journey identity and token. */
+export async function requestJourneyTurn(
+  args: {
+    subjectBrief: string;
+    history: AgentHistoryItem[];
+    precision: Precision;
+    journeyId?: string;
+    journeyToken?: string;
+  },
+  fetcher: typeof fetch = fetch,
+): Promise<JourneyTurnResult> {
+  const response = await fetcher("/api/journey-turn", {
+    method: "POST",
+    headers: {
+      authorization: "Bearer __demo__",
+      "content-type": "application/json",
+    },
+    body: JSON.stringify(args),
+  });
+  const text = await response.text();
+  if (!response.ok) {
+    let code = `http_${response.status}`;
+    try {
+      const error = (JSON.parse(text) as { error?: unknown }).error;
+      if (typeof error === "string" && error.trim()) code = error.trim();
+    } catch {
+      // HTTP status remains authoritative for malformed error bodies.
+    }
+    throw new AdaptiveRouteError(code, `${response.status}: ${code}`, {
+      status: response.status,
+      retryable: response.status === 408 || response.status === 429 || response.status >= 500,
+    });
+  }
+  let value: unknown;
+  try {
+    value = JSON.parse(text);
+  } catch {
+    throw new AdaptiveRouteError("journey_invalid_payload", "Journey 服务返回了无效结果。", {
+      retryable: true,
+    });
+  }
+  const raw = value as Partial<JourneyTurnResult> | null;
+  const journey = raw?.journey;
+  const decision = raw?.decision;
+  if (!journey
+    || typeof journey.id !== "string"
+    || !journey.id
+    || (journey.route !== "fixed" && journey.route !== "adaptive")
+    || typeof journey.token !== "string"
+    || !journey.token
+    || !decision
+    || typeof decision.done !== "boolean"
+    || (typeof decision.nextQuestionId !== "string" && decision.nextQuestionId !== null)
+    || !Array.isArray(decision.visibleOptionIds)
+    || decision.visibleOptionIds.some((id) => typeof id !== "string")
+    || !raw?.diagnostics
+    || typeof raw.diagnostics !== "object") {
+    throw new AdaptiveRouteError("journey_invalid_payload", "Journey 服务返回了无效结果。", {
+      retryable: true,
+    });
+  }
+  return raw as JourneyTurnResult;
 }
 
 export async function polishPrompt(
