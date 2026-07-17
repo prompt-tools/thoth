@@ -64,7 +64,7 @@ export function POST(request: Request): Promise<Response> {
   });
   return handleJourneyTurnRequest(request, {
     secret: process.env.ADAPTIVE_TURN_SECRET,
-    release: process.env.JOURNEY_RELEASE ?? process.env.VERCEL_GIT_COMMIT_SHA ?? "local",
+    release: process.env.JOURNEY_RELEASE?.trim() || process.env.VERCEL_GIT_COMMIT_SHA?.trim() || "local",
     exposure: adaptiveEnabled ? process.env.ADAPTIVE_CANARY_EXPOSURE ?? "0" : "0",
     demoKey: process.env.DEMO_DEEPSEEK_KEY,
     now: () => Date.now(),

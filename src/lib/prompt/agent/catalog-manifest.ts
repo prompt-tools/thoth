@@ -1,3 +1,4 @@
+import "../init";
 import { IMAGE_TARGET_ID } from "../types";
 import { getOptionsForTarget, tryGetOptionSet } from "../registry";
 import { GRADIENT } from "./gradient";

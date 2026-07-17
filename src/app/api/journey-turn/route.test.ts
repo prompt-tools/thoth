@@ -9,6 +9,24 @@ afterEach(() => {
 });
 
 describe("POST /api/journey-turn", () => {
+  it("falls back to a local release when Vercel exposes blank git metadata", async () => {
+    vi.stubEnv("ADAPTIVE_TURN_SECRET", "a-strong-test-secret-with-at-least-32-bytes");
+    vi.stubEnv("JOURNEY_RELEASE", " ");
+    vi.stubEnv("VERCEL_GIT_COMMIT_SHA", " ");
+    vi.stubEnv("DEMO_DEEPSEEK_KEY", "server-key");
+    vi.stubEnv("UPSTASH_REDIS_REST_URL", "");
+    vi.stubEnv("UPSTASH_REDIS_REST_TOKEN", "");
+
+    const response = await POST(new Request("http://localhost/api/journey-turn", {
+      method: "POST",
+      headers: { authorization: "Bearer __demo__", "content-type": "application/json" },
+      body: JSON.stringify({ subjectBrief: "原创游侠角色", history: [], precision: "simple" }),
+    }));
+
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({ error: "attempt_store_unavailable" });
+  });
+
   it("fails closed before DeepSeek when the durable attempt store is not configured", async () => {
     vi.stubEnv("ADAPTIVE_TURN_SECRET", "a-strong-test-secret-with-at-least-32-bytes");
     vi.stubEnv("JOURNEY_RELEASE", "release-a");
