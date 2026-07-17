@@ -7,7 +7,7 @@ import { imagePromptAgentWorkType } from "@/lib/prompt/work-types/image-prompt-a
 import type { PromptSelections, RenderedPrompt } from "@/lib/prompt/types";
 import { buildCatalogManifest } from "@/lib/prompt/agent/catalog-manifest";
 import type { AgentDecision, AgentHistoryItem } from "@/lib/prompt/agent/decision";
-import { runAgentTurn, requestAdaptiveTurn, polishPrompt, autoFillDimensions } from "@/lib/prompt/agent/client";
+import { runAgentTurn, requestAdaptiveTurn, requestJourneyTurn, polishPrompt, autoFillDimensions } from "@/lib/prompt/agent/client";
 import { DEFAULT_PROVIDER_ID, getProvider } from "@/lib/prompt/agent/providers";
 import { suggestedIdsFor } from "@/lib/prompt/agent/audit-model";
 import { resolveVisibleOptions } from "@/lib/prompt/agent/options-resolver";
@@ -139,6 +139,7 @@ export function useAgentGuideController() {
   const [selections, setSelections] = useState<PromptSelections>({});
   const [decision, setDecision] = useState<AgentDecision | null>(null);
   const [adaptiveProjection, setAdaptiveProjection] = useState<AdaptiveBrowserTurnProjection | null>(null);
+  const [journeyRoute, setJourneyRoute] = useState<"fixed" | "adaptive" | null>(null);
   const [decisionSource, setDecisionSource] = useState<"model" | "fallback" | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -166,10 +167,12 @@ export function useAgentGuideController() {
   const sessionRef = useRef(0);
   // Stable id for the whole describe→done journey (telemetry trace key).
   const sessionIdRef = useRef("");
-  // Server-signed proof of the Ask whose answer may advance Adaptive history.
+  // Server-signed proof that may advance a legacy Adaptive Ask or Built-in Journey.
   const turnTokenRef = useRef("");
-  // The answer remains pending until the server accepts it. Retry must resend
-  // this exact signed history extension, not the last committed prefix.
+  const journeyIdRef = useRef("");
+  const journeyRouteRef = useRef<"fixed" | "adaptive" | null>(null);
+  // Server-validated answers remain pending until accepted. Retry resends the
+  // exact signed history extension, not the last committed prefix.
   const pendingHistoryRef = useRef<AgentHistoryItem[] | null>(null);
 
   /** Fire-and-forget telemetry: persist this session's full step log (presented option ids
@@ -286,7 +289,10 @@ export function useAgentGuideController() {
       setDecisionSource(null);
 
       // H3: browser-side safety ceiling
-      if (!ADAPTIVE_ROUTING && nextHistory.length >= H3_MAX_TURNS) {
+      const priorRouteIsAdaptive = BUILTIN_DEMO
+        ? journeyRouteRef.current === "adaptive"
+        : ADAPTIVE_ROUTING;
+      if (!priorRouteIsAdaptive && nextHistory.length >= H3_MAX_TURNS) {
         logAgent("decision", { done: true, reason: "h3_ceiling", turns: nextHistory.length });
         setPhase("done");
         setLoading(false);
@@ -294,14 +300,22 @@ export function useAgentGuideController() {
       }
 
       try {
-        const turnResult = ADAPTIVE_ROUTING
-          ? await requestAdaptiveTurn(keyRef.current, {
+        const turnResult = BUILTIN_DEMO
+          ? await requestJourneyTurn({
+              subjectBrief: descriptionRef.current,
+              history: nextHistory,
+              precision: precisionRef.current,
+              ...(journeyIdRef.current ? { journeyId: journeyIdRef.current } : {}),
+              ...(turnTokenRef.current ? { journeyToken: turnTokenRef.current } : {}),
+            })
+          : ADAPTIVE_ROUTING
+            ? await requestAdaptiveTurn(keyRef.current, {
               subjectBrief: descriptionRef.current,
               history: nextHistory,
               precision: precisionRef.current,
               ...(turnTokenRef.current ? { turnToken: turnTokenRef.current } : {}),
             })
-          : await runAgentTurn(
+            : await runAgentTurn(
               getProvider(providerRef.current),
               keyRef.current,
               {
@@ -311,16 +325,30 @@ export function useAgentGuideController() {
                 precision: precisionRef.current,
               }
             );
-        const browserProjection = ADAPTIVE_ROUTING
-          ? projectAdaptiveTurnForBrowser(turnResult, manifest)
+        const activeAdaptive = BUILTIN_DEMO
+          ? "journey" in turnResult && turnResult.journey.route === "adaptive"
+          : ADAPTIVE_ROUTING;
+        const browserProjection = activeAdaptive
+          ? projectAdaptiveTurnForBrowser(BUILTIN_DEMO && "journey" in turnResult
+              ? {
+                  decision: turnResult.decision,
+                  diagnostics: turnResult.diagnostics,
+                  ...(turnResult.decision.done ? {} : { turnToken: turnResult.journey.token }),
+                }
+              : turnResult, manifest)
           : null;
         const next = browserProjection?.decision ?? turnResult.decision;
         const diagnostics = browserProjection?.diagnostics ?? turnResult.diagnostics;
         if (sessionRef.current !== mySession) return; // superseded
-        if (ADAPTIVE_ROUTING) {
-          turnTokenRef.current = browserProjection?.kind === "ask"
-            ? browserProjection.turnToken
-            : "";
+        if (BUILTIN_DEMO && "journey" in turnResult) {
+          journeyIdRef.current = turnResult.journey.id;
+          journeyRouteRef.current = turnResult.journey.route;
+          turnTokenRef.current = turnResult.journey.token;
+          setJourneyRoute(turnResult.journey.route);
+        } else if (activeAdaptive) {
+          turnTokenRef.current = browserProjection?.kind === "ask" ? browserProjection.turnToken : "";
+        }
+        if (BUILTIN_DEMO || activeAdaptive) {
           const { selections: acceptedSelections, freeTexts: acceptedFreeTexts } = buildRenderInputs(
             nextHistory,
             manifest,
@@ -341,7 +369,7 @@ export function useAgentGuideController() {
         } else {
           consecutiveFallbackRef.current = 0;
         }
-        if (!ADAPTIVE_ROUTING && consecutiveFallbackRef.current >= 2) {
+        if (!activeAdaptive && consecutiveFallbackRef.current >= 2) {
           // Intentionally skip setDecision(next) — the UI transitions to "done"
           // phase which renders the stitched prompt from existing selections.
           logAgent("decision", {
@@ -356,14 +384,14 @@ export function useAgentGuideController() {
         }
         setDecisionSource(fallbackUsed ? "fallback" : "model");
 
-        if (!ADAPTIVE_ROUTING && next.done && nextHistory.length === 0) {
+        if (!activeAdaptive && next.done && nextHistory.length === 0) {
           // Model ended before asking anything — nothing to stitch.
           setError("AI 没有给出任何问题，请点重试或换一种描述。");
           return;
         }
 
         if (next.done) {
-          const { filledHistory, filledIds } = ADAPTIVE_ROUTING
+          const { filledHistory, filledIds } = activeAdaptive
             ? { filledHistory: nextHistory, filledIds: new Set<string>() }
             : await runSecondaryAutofill({
                 history: nextHistory,
@@ -380,7 +408,7 @@ export function useAgentGuideController() {
             withInferredSubject(filledHistory, descriptionRef.current, primaryType),
             manifest,
           );
-          if (!ADAPTIVE_ROUTING && Object.keys(sel).length === 0 && Object.keys(ft).length === 0) {
+          if (!activeAdaptive && Object.keys(sel).length === 0 && Object.keys(ft).length === 0) {
             setError("还没选任何内容，请至少选几项或换个描述");
             return;
           }
@@ -405,7 +433,7 @@ export function useAgentGuideController() {
         }
       } catch (e) {
         if (sessionRef.current !== mySession) return;
-        setError(ADAPTIVE_ROUTING
+        setError((BUILTIN_DEMO || ADAPTIVE_ROUTING)
           ? projectAdaptiveErrorForBrowser(e).message
           : e instanceof Error ? e.message : String(e));
       } finally {
@@ -443,6 +471,9 @@ export function useAgentGuideController() {
       sessionRef.current++; // void any in-flight fetch from a prior session
       consecutiveFallbackRef.current = 0;
       turnTokenRef.current = "";
+      journeyIdRef.current = "";
+      journeyRouteRef.current = null;
+      setJourneyRoute(null);
       pendingHistoryRef.current = null;
       // Collect a free-text description first; the agent routes from it.
       setPhase("describe");
@@ -453,7 +484,7 @@ export function useAgentGuideController() {
   /** Leave the describe step (with or without text) and ask the first question. */
   const startWithDescription = useCallback(
     (text: string) => {
-      if (ADAPTIVE_ROUTING && !text.trim()) {
+      if (!BUILTIN_DEMO && ADAPTIVE_ROUTING && !text.trim()) {
         setError("请先描述你想要的人物或角色。");
         return;
       }
@@ -474,6 +505,9 @@ export function useAgentGuideController() {
       setAutoFilledQuestionIds(new Set());
       clearAgentLog();
       turnTokenRef.current = "";
+      journeyIdRef.current = "";
+      journeyRouteRef.current = null;
+      setJourneyRoute(null);
       pendingHistoryRef.current = null;
       sessionIdRef.current = (typeof crypto !== "undefined" && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now());
       logAgent("describe", { text: text.trim() || "(空，直接开始)", primaryType: routePrimaryType(text) });
@@ -484,15 +518,15 @@ export function useAgentGuideController() {
   );
 
   const currentDimension = useMemo(
-    () => ADAPTIVE_ROUTING
+    () => (BUILTIN_DEMO ? journeyRoute === "adaptive" : ADAPTIVE_ROUTING)
       ? adaptiveProjection?.kind === "ask" ? adaptiveProjection.dimension : null
       : decision ? manifest.find((d) => d.questionId === decision.nextQuestionId) ?? null : null,
-    [adaptiveProjection, decision, manifest]
+    [adaptiveProjection, decision, journeyRoute, manifest]
   );
 
   const visibleOptions = useMemo(() => {
     if (!decision || !currentDimension) return [];
-    if (ADAPTIVE_ROUTING) {
+    if (BUILTIN_DEMO ? journeyRoute === "adaptive" : ADAPTIVE_ROUTING) {
       return adaptiveProjection?.kind === "ask" ? adaptiveProjection.options : [];
     }
     const { visible } = resolveVisibleOptions(
@@ -501,7 +535,7 @@ export function useAgentGuideController() {
       selectedOptionIds(selections),
     );
     return visible;
-  }, [adaptiveProjection, decision, currentDimension, selections]);
+  }, [adaptiveProjection, decision, currentDimension, journeyRoute, selections]);
 
   // Options recommended by the audit associations given prior picks ("推荐" badge).
   // On the subject question (first turn), also derive suggestions from the description
@@ -557,13 +591,14 @@ export function useAgentGuideController() {
     if (draft.length === 0 && !text) return;
     const questionId = decision.nextQuestionId;
     if (!questionId) return;
-    let picked = ADAPTIVE_ROUTING && text ? [] : draft;
-    if (questionId === "subject" && picked.length === 0 && !(ADAPTIVE_ROUTING && text)) {
+    const serverValidated = BUILTIN_DEMO || ADAPTIVE_ROUTING;
+    let picked = serverValidated && text ? [] : draft;
+    if (questionId === "subject" && picked.length === 0 && !(serverValidated && text)) {
       picked = inferSubjectOptionIds(descriptionRef.current, primaryType);
     }
     const nextHistory = appendAnswer(history, questionId, picked, text || undefined);
     logAgent("submit", { questionId, selectedOptionIds: picked, freeText: text || undefined });
-    if (!ADAPTIVE_ROUTING) {
+    if (!serverValidated) {
       if (picked.length > 0) {
         const value = selectionValueFor(currentDimension.mode, picked);
         if (value !== undefined) {
@@ -578,7 +613,7 @@ export function useAgentGuideController() {
       });
       setHistory(nextHistory);
     }
-    if (ADAPTIVE_ROUTING) pendingHistoryRef.current = nextHistory;
+    if (serverValidated) pendingHistoryRef.current = nextHistory;
     flushTelemetry("submit"); // checkpoint each answer (captures abandonment too)
     void fetchNext(nextHistory);
   }, [decision, currentDimension, draft, draftText, history, fetchNext, flushTelemetry, primaryType]);
@@ -593,7 +628,8 @@ export function useAgentGuideController() {
         : [];
     logAgent("submit", { questionId, skipped: true, inferredSubjectIds: picked.length ? picked : undefined });
     const nextHistory = appendAnswer(history, questionId, picked);
-    if (!ADAPTIVE_ROUTING) {
+    const serverValidated = BUILTIN_DEMO || ADAPTIVE_ROUTING;
+    if (!serverValidated) {
       if (picked.length > 0) {
         const value = selectionValueFor(currentDimension.mode, picked);
         if (value !== undefined) {
@@ -602,7 +638,7 @@ export function useAgentGuideController() {
       }
       setHistory(nextHistory);
     }
-    if (ADAPTIVE_ROUTING) pendingHistoryRef.current = nextHistory;
+    if (serverValidated) pendingHistoryRef.current = nextHistory;
     setDraft([]);
     setDraftText("");
     flushTelemetry("skip");
@@ -672,6 +708,9 @@ export function useAgentGuideController() {
     sessionRef.current++; // void any in-flight fetch
     consecutiveFallbackRef.current = 0;
     turnTokenRef.current = "";
+    journeyIdRef.current = "";
+    journeyRouteRef.current = null;
+    setJourneyRoute(null);
     pendingHistoryRef.current = null;
     logAgent("restart");
     // Back to the description step so the user can restate their goal.
@@ -718,7 +757,7 @@ export function useAgentGuideController() {
     telemetryEnabled,
     setTelemetryEnabled,
     builtinDemo: BUILTIN_DEMO,
-    adaptiveRouting: ADAPTIVE_ROUTING,
+    adaptiveRouting: BUILTIN_DEMO ? journeyRoute === "adaptive" : ADAPTIVE_ROUTING,
     readKeyFor: (id: string) => readStorage(keyStorageFor(id)),
     saveKeyAndStart,
     startWithDescription,

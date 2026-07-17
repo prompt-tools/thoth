@@ -3,11 +3,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const clientMocks = vi.hoisted(() => ({
   requestAdaptiveTurn: vi.fn(),
+  requestJourneyTurn: vi.fn(),
 }));
 
 vi.mock("@/lib/prompt/agent/client", async (importOriginal) => ({
   ...await importOriginal<typeof import("@/lib/prompt/agent/client")>(),
   requestAdaptiveTurn: clientMocks.requestAdaptiveTurn,
+  requestJourneyTurn: clientMocks.requestJourneyTurn,
 }));
 
 describe("useAgentGuideController Adaptive answer lifecycle", () => {
@@ -16,6 +18,7 @@ describe("useAgentGuideController Adaptive answer lifecycle", () => {
     vi.stubEnv("NEXT_PUBLIC_AGENT_DEMO_BUILTIN", "1");
     vi.stubEnv("NEXT_PUBLIC_ADAPTIVE_ROUTING", "1");
     clientMocks.requestAdaptiveTurn.mockReset();
+    clientMocks.requestJourneyTurn.mockReset();
     localStorage.clear();
   });
 
@@ -29,8 +32,9 @@ describe("useAgentGuideController Adaptive answer lifecycle", () => {
       "image_framing:medium_shot",
       "image_framing:wide_shot",
     ];
-    clientMocks.requestAdaptiveTurn
+    clientMocks.requestJourneyTurn
       .mockResolvedValueOnce({
+        journey: { id: "journey-1", route: "adaptive", token: "signed-turn-1" },
         decision: {
           nextQuestionId: "framing",
           questionText: "取景范围？",
@@ -39,10 +43,10 @@ describe("useAgentGuideController Adaptive answer lifecycle", () => {
           done: false,
         },
         diagnostics: { source: "model" },
-        turnToken: "signed-turn-1",
       })
       .mockRejectedValueOnce(new Error("temporary network failure"))
       .mockResolvedValueOnce({
+        journey: { id: "journey-1", route: "adaptive", token: "signed-turn-2" },
         decision: {
           nextQuestionId: "camera",
           questionText: "镜头语言？",
@@ -55,11 +59,11 @@ describe("useAgentGuideController Adaptive answer lifecycle", () => {
           done: false,
         },
         diagnostics: { source: "model" },
-        turnToken: "signed-turn-2",
       });
     const { useAgentGuideController } = await import("./use-agent-guide-controller");
     const { result } = renderHook(() => useAgentGuideController());
 
+    expect(result.current.adaptiveRouting).toBe(false);
     act(() => result.current.startWithDescription("窗边的女学生"));
     await waitFor(() => expect(result.current.decision?.nextQuestionId).toBe("framing"));
 
@@ -69,9 +73,10 @@ describe("useAgentGuideController Adaptive answer lifecycle", () => {
     act(() => result.current.submitStep());
     await waitFor(() => expect(result.current.error).toBe("temporary network failure"));
 
-    const pendingInput = clientMocks.requestAdaptiveTurn.mock.calls[1][1];
+    const pendingInput = clientMocks.requestJourneyTurn.mock.calls[1][0];
     expect(pendingInput).toMatchObject({
-      turnToken: "signed-turn-1",
+      journeyId: "journey-1",
+      journeyToken: "signed-turn-1",
       history: [{
         questionId: "framing",
         selectedOptionIds: [],
@@ -83,7 +88,7 @@ describe("useAgentGuideController Adaptive answer lifecycle", () => {
     act(() => result.current.retryStep());
     await waitFor(() => expect(result.current.decision?.nextQuestionId).toBe("camera"));
 
-    expect(clientMocks.requestAdaptiveTurn.mock.calls[2][1]).toEqual(pendingInput);
+    expect(clientMocks.requestJourneyTurn.mock.calls[2][0]).toEqual(pendingInput);
     expect(result.current.history).toEqual(pendingInput.history);
   });
 
@@ -93,8 +98,9 @@ describe("useAgentGuideController Adaptive answer lifecycle", () => {
       "image_framing:medium_shot",
       "image_framing:wide_shot",
     ];
-    clientMocks.requestAdaptiveTurn
+    clientMocks.requestJourneyTurn
       .mockResolvedValueOnce({
+        journey: { id: "journey-1", route: "adaptive", token: "signed-turn-1" },
         decision: {
           nextQuestionId: "framing",
           questionText: "取景范围？",
@@ -103,9 +109,9 @@ describe("useAgentGuideController Adaptive answer lifecycle", () => {
           done: false,
         },
         diagnostics: { source: "model" },
-        turnToken: "signed-turn-1",
       })
       .mockResolvedValueOnce({
+        journey: { id: "journey-1", route: "adaptive", token: "untrusted-turn-2" },
         decision: {
           nextQuestionId: "camera",
           questionText: "镜头语言？",
@@ -118,9 +124,9 @@ describe("useAgentGuideController Adaptive answer lifecycle", () => {
           done: false,
         },
         diagnostics: { source: "model" },
-        turnToken: "untrusted-turn-2",
       })
       .mockResolvedValueOnce({
+        journey: { id: "journey-1", route: "adaptive", token: "signed-turn-2" },
         decision: {
           nextQuestionId: "camera",
           questionText: "镜头语言？",
@@ -133,7 +139,6 @@ describe("useAgentGuideController Adaptive answer lifecycle", () => {
           done: false,
         },
         diagnostics: { source: "model" },
-        turnToken: "signed-turn-2",
       });
     const { useAgentGuideController } = await import("./use-agent-guide-controller");
     const { result } = renderHook(() => useAgentGuideController());
@@ -149,9 +154,132 @@ describe("useAgentGuideController Adaptive answer lifecycle", () => {
     act(() => result.current.retryStep());
     await waitFor(() => expect(result.current.decision?.nextQuestionId).toBe("camera"));
 
-    expect(clientMocks.requestAdaptiveTurn.mock.calls[2][1]).toMatchObject({
-      turnToken: "signed-turn-1",
+    expect(clientMocks.requestJourneyTurn.mock.calls[2][0]).toMatchObject({
+      journeyId: "journey-1",
+      journeyToken: "signed-turn-1",
       history: [{ questionId: "framing", selectedOptionIds: [framingIds[0]] }],
+    });
+  });
+});
+
+describe("useAgentGuideController Built-in Journey routing", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    vi.stubEnv("NEXT_PUBLIC_AGENT_DEMO_BUILTIN", "1");
+    vi.stubEnv("NEXT_PUBLIC_ADAPTIVE_ROUTING", "1");
+    clientMocks.requestAdaptiveTurn.mockReset();
+    clientMocks.requestJourneyTurn.mockReset();
+    localStorage.clear();
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("carries the latest token while obeying the server-selected fixed route", async () => {
+    const framingIds = [
+      "image_framing:close_up",
+      "image_framing:medium_shot",
+      "image_framing:wide_shot",
+    ];
+    clientMocks.requestJourneyTurn
+      .mockResolvedValueOnce({
+        journey: { id: "journey-1", route: "fixed", token: "journey-token-1" },
+        decision: {
+          nextQuestionId: "framing",
+          visibleOptionIds: framingIds,
+          done: false,
+        },
+        diagnostics: { source: "ordered", fallbackUsed: false },
+      })
+      .mockResolvedValueOnce({
+        journey: { id: "journey-1", route: "fixed", token: "journey-token-2" },
+        decision: {
+          nextQuestionId: "camera",
+          visibleOptionIds: [
+            "image_camera:35mm_wide",
+            "image_camera:50mm_standard",
+            "image_camera:85mm_portrait",
+          ],
+          done: false,
+        },
+        diagnostics: { source: "ordered", fallbackUsed: false },
+      })
+      .mockResolvedValueOnce({
+        journey: { id: "journey-2", route: "fixed", token: "journey-token-new" },
+        decision: {
+          nextQuestionId: "framing",
+          visibleOptionIds: framingIds,
+          done: false,
+        },
+        diagnostics: { source: "ordered", fallbackUsed: false },
+      });
+    const { useAgentGuideController } = await import("./use-agent-guide-controller");
+    const { result } = renderHook(() => useAgentGuideController());
+
+    act(() => result.current.startWithDescription("窗边的女学生"));
+    await waitFor(() => expect(result.current.decision?.nextQuestionId).toBe("framing"));
+    expect(result.current.adaptiveRouting).toBe(false);
+
+    act(() => result.current.toggleDraft(framingIds[0]));
+    act(() => result.current.submitStep());
+    await waitFor(() => expect(result.current.decision?.nextQuestionId).toBe("camera"));
+
+    expect(clientMocks.requestJourneyTurn.mock.calls[1][0]).toMatchObject({
+      journeyId: "journey-1",
+      journeyToken: "journey-token-1",
+      history: [{ questionId: "framing", selectedOptionIds: [framingIds[0]] }],
+    });
+    expect(clientMocks.requestAdaptiveTurn).not.toHaveBeenCalled();
+
+    act(() => result.current.restart());
+    act(() => result.current.startWithDescription("另一位角色"));
+    await waitFor(() => expect(clientMocks.requestJourneyTurn).toHaveBeenCalledTimes(3));
+    expect(clientMocks.requestJourneyTurn.mock.calls[2][0]).not.toHaveProperty("journeyId");
+    expect(clientMocks.requestJourneyTurn.mock.calls[2][0]).not.toHaveProperty("journeyToken");
+  });
+
+  it("lets fixed-cohort free text atomically override selected cards", async () => {
+    const framingIds = [
+      "image_framing:close_up",
+      "image_framing:medium_shot",
+      "image_framing:wide_shot",
+    ];
+    clientMocks.requestJourneyTurn
+      .mockResolvedValueOnce({
+        journey: { id: "journey-1", route: "fixed", token: "journey-token-1" },
+        decision: { nextQuestionId: "framing", visibleOptionIds: framingIds, done: false },
+        diagnostics: { source: "ordered", fallbackUsed: false },
+      })
+      .mockResolvedValueOnce({
+        journey: { id: "journey-1", route: "fixed", token: "journey-token-2" },
+        decision: {
+          nextQuestionId: "camera",
+          visibleOptionIds: [
+            "image_camera:35mm_wide",
+            "image_camera:50mm_standard",
+            "image_camera:85mm_portrait",
+          ],
+          done: false,
+        },
+        diagnostics: { source: "ordered", fallbackUsed: false },
+      });
+    const { useAgentGuideController } = await import("./use-agent-guide-controller");
+    const { result } = renderHook(() => useAgentGuideController());
+
+    act(() => result.current.startWithDescription("窗边的女学生"));
+    await waitFor(() => expect(result.current.decision?.nextQuestionId).toBe("framing"));
+    act(() => result.current.toggleDraft(framingIds[0]));
+    act(() => result.current.setDraftText("人物占画面三分之一，保留窗景"));
+    act(() => result.current.submitStep());
+    await waitFor(() => expect(result.current.decision?.nextQuestionId).toBe("camera"));
+
+    expect(clientMocks.requestJourneyTurn.mock.calls[1][0]).toMatchObject({
+      history: [{
+        questionId: "framing",
+        selectedOptionIds: [],
+        freeText: "人物占画面三分之一，保留窗景",
+      }],
     });
   });
 });
