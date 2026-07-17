@@ -136,13 +136,14 @@ export async function handleAdaptiveTurnRequest(
 
   const now = deps.now();
   const controller = new AbortController();
-  let callerCancelled = request.signal.aborted;
+  const callerSignal = request.signal;
+  let callerCancelled = callerSignal?.aborted ?? false;
   const abortFromCaller = () => {
     callerCancelled = true;
     controller.abort();
   };
   if (callerCancelled) controller.abort();
-  else request.signal.addEventListener("abort", abortFromCaller, { once: true });
+  else callerSignal?.addEventListener("abort", abortFromCaller, { once: true });
   const timeoutError = new Error("adaptive_turn_timeout");
   let timedOut = false;
   let timer: ReturnType<typeof setTimeout>;
@@ -303,6 +304,6 @@ export async function handleAdaptiveTurnRequest(
     return json(withTurnState(result, snapshot, turnSecret, now));
   } finally {
     clearTimeout(timer!);
-    request.signal.removeEventListener("abort", abortFromCaller);
+    callerSignal?.removeEventListener("abort", abortFromCaller);
   }
 }
