@@ -116,4 +116,21 @@ describe("Adaptive browser projection", () => {
       message: "temporary network failure",
     });
   });
+
+  it("recognizes a serialized AdaptiveRouteError without relying on instanceof", () => {
+    expect(projectAdaptiveErrorForBrowser({
+      name: "AdaptiveRouteError",
+      code: "no_safe_adaptive_turn",
+      status: 409,
+      message: "409: no_safe_adaptive_turn",
+      retryable: false,
+    })).toEqual({
+      kind: "error",
+      phase: "error",
+      code: "no_safe_adaptive_turn",
+      status: 409,
+      message: "409: no_safe_adaptive_turn",
+      retryable: false,
+    });
+  });
 });

@@ -212,14 +212,16 @@ export function projectAdaptiveTurnForBrowser(
 
 /** Shared hard-error projection for the UI and deterministic replay evidence. */
 export function projectAdaptiveErrorForBrowser(error: unknown): AdaptiveBrowserErrorProjection {
-  if (error instanceof AdaptiveRouteError) {
+  if (error instanceof AdaptiveRouteError || (isRecord(error)
+    && error.name === "AdaptiveRouteError"
+    && typeof error.code === "string")) {
     return {
       kind: "error",
       phase: "error",
-      code: error.code,
-      status: error.status,
-      message: error.message,
-      retryable: error.retryable,
+      code: error.code as string,
+      status: typeof error.status === "number" ? error.status : null,
+      message: typeof error.message === "string" ? error.message : "自适应请求失败，请重试。",
+      retryable: error.retryable === true,
     };
   }
   const message = error instanceof Error && error.message
