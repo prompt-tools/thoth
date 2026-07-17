@@ -15,7 +15,7 @@ import { validateBranchClaims } from "./adaptive-replay-coverage.mjs";
 import {
   ARTIFACT_VERSION, CORPUS_VERSION, FIXED_NOW, REQUIRED_BRANCHES, TURN_SECRET,
   compare, currentMetadata, evaluatorHash, parseArgs, productionDirtyPaths,
-  readCorpus, sha256, writeArtifacts,
+  readCorpus, repositoryCommit, sha256, writeArtifacts,
 } from "./adaptive-replay-support.mjs";
 
 export { currentMetadata } from "./adaptive-replay-support.mjs";
@@ -234,6 +234,7 @@ export async function runAdaptiveReplay({ input, out }) {
     command: "npm run eval:adaptive -- --mode replay --input <input> --out <out>",
     corpusHash: sha256(corpus.bytes),
     evaluatorHash: evaluatorHash(),
+    repositoryCommit: repositoryCommit(),
     metadata,
     model: "deepseek-v4-flash",
     randomization: "none",

@@ -76,7 +76,6 @@ export function currentMetadata() {
   const manifest = buildCatalogManifest();
   const snapshot = buildAdaptiveTurnSnapshot({ subjectBrief: "原创游侠角色", history: [], precision: "simple" });
   return {
-    applicationCommit: execFileSync("git", ["log", "-1", "--format=%H", "--", ...PRODUCTION_FILES], { cwd: ROOT, encoding: "utf8" }).trim(),
     productionHash: bundleHash(PRODUCTION_FILES),
     contractHash: fileHash(".research/deepseek-turn-contract-2026-07-15.md"),
     fixtureHash: fileHash(".research/adaptive-question-quality.fixtures.json"),
@@ -88,6 +87,10 @@ export function currentMetadata() {
     routingPromptVersion: "adaptive-question-system-v1",
     judgePromptVersion: "adaptive-question-judge-v1",
   };
+}
+
+export function repositoryCommit() {
+  return execFileSync("git", ["rev-parse", "HEAD"], { cwd: ROOT, encoding: "utf8" }).trim();
 }
 
 export function evaluatorHash() {
