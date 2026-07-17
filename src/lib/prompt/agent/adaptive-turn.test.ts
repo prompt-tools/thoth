@@ -235,6 +235,30 @@ describe("Adaptive multi-turn snapshot", () => {
       .toMatchObject({ source: "fallback", reason: "completion_shape" });
   });
 
+  it("uses a stable failure code for invalid tool argument JSON", () => {
+    const snapshot = buildAdaptiveTurnSnapshot({
+      subjectBrief: "原创游侠角色",
+      history: [],
+      precision: "simple",
+    });
+    const response = {
+      choices: [{
+        finish_reason: "tool_calls",
+        message: {
+          tool_calls: [{
+            function: {
+              name: "decide_adaptive_turn",
+              arguments: "{not-json",
+            },
+          }],
+        },
+      }],
+    };
+
+    expect(normalizeAdaptiveResponse(response, snapshot).diagnostics)
+      .toEqual({ source: "fallback", reason: "tool_arguments_invalid_json" });
+  });
+
   it("allows exactly one final Ask at the sparse and detailed budget boundaries", () => {
     const sparse = buildAdaptiveTurnSnapshot({
       subjectBrief: "原创游侠角色",

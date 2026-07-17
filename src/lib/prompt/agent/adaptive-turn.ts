@@ -241,7 +241,12 @@ export function normalizeAdaptiveResponse(raw: unknown, snapshot: AdaptiveTurnSn
     }
     const encoded = calls[0].function?.arguments;
     if (typeof encoded !== "string") throw new Error("tool_arguments");
-    const value = JSON.parse(encoded) as unknown;
+    let value: unknown;
+    try {
+      value = JSON.parse(encoded) as unknown;
+    } catch {
+      throw new Error("tool_arguments_invalid_json");
+    }
     if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("tool_arguments");
     const input = value as Record<string, unknown>;
     const allowedKeys = ["done", "nextQuestionId", "questionText", "helperText", "optionIds"];

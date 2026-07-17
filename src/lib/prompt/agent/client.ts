@@ -14,6 +14,10 @@ import { GRADIENT } from "./gradient";
 import { conflictIdsFor, suggestedIdsFor } from "./audit-model";
 import { heuristicFillGaps, missingPortraitCoreFill } from "./fill";
 import type { AdaptiveTurnResult } from "./adaptive-turn";
+import {
+  AdaptiveRouteError,
+  parseAdaptiveRouteSuccess,
+} from "./adaptive-browser-projection";
 
 const ANTHROPIC_VERSION = "2023-06-01";
 const PROXY_URL = "/api/llm";
@@ -525,12 +529,39 @@ export async function requestAdaptiveTurn(
     body: JSON.stringify(args),
   });
   const text = await response.text();
-  if (!response.ok) throw new Error(`${response.status}: ${text.slice(0, 400)}`);
-  try {
-    return JSON.parse(text) as AdaptiveTurnResult;
-  } catch {
-    throw new Error(`Adaptive route returned non-JSON: ${text.slice(0, 200)}`);
+  if (!response.ok) {
+    let code = `http_${response.status}`;
+    try {
+      const body = JSON.parse(text) as unknown;
+      if (body && typeof body === "object" && !Array.isArray(body)) {
+        const error = (body as Record<string, unknown>).error;
+        if (typeof error === "string" && error.trim()) code = error.trim();
+      }
+    } catch {
+      // The status is still authoritative when the hard-error body is not JSON.
+    }
+    throw new AdaptiveRouteError(
+      code,
+      `${response.status}: ${code}`,
+      {
+        status: response.status,
+        retryable: response.status === 408
+          || response.status === 429
+          || response.status >= 500,
+      },
+    );
   }
+  let payload: unknown;
+  try {
+    payload = JSON.parse(text) as unknown;
+  } catch {
+    throw new AdaptiveRouteError(
+      "adaptive_route_invalid_json",
+      "自适应服务返回了无法解析的结果，请重试。",
+      { status: response.status, retryable: true },
+    );
+  }
+  return parseAdaptiveRouteSuccess(payload);
 }
 
 export async function polishPrompt(
