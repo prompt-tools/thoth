@@ -17,6 +17,11 @@ import { routePrimaryType, suggestedIdsFromDescription, inferSubjectOptionIds } 
 import type { Precision } from "@/lib/prompt/agent/gradient";
 import { computeFillSet } from "@/lib/prompt/agent/fill";
 import { portraitFillCap } from "@/lib/prompt/agent/fill-boost";
+import {
+  projectAdaptiveErrorForBrowser,
+  projectAdaptiveTurnForBrowser,
+  type AdaptiveBrowserTurnProjection,
+} from "@/lib/prompt/agent/adaptive-browser-projection";
 
 /** Flatten selection values (string | string[]) into a flat id list. */
 function selectedOptionIds(selections: PromptSelections): string[] {
@@ -133,6 +138,7 @@ export function useAgentGuideController() {
   const [history, setHistory] = useState<AgentHistoryItem[]>([]);
   const [selections, setSelections] = useState<PromptSelections>({});
   const [decision, setDecision] = useState<AgentDecision | null>(null);
+  const [adaptiveProjection, setAdaptiveProjection] = useState<AdaptiveBrowserTurnProjection | null>(null);
   const [decisionSource, setDecisionSource] = useState<"model" | "fallback" | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -276,6 +282,7 @@ export function useAgentGuideController() {
       setLoading(true);
       setError(null);
       setDecision(null);
+      setAdaptiveProjection(null);
       setDecisionSource(null);
 
       // H3: browser-side safety ceiling
@@ -304,11 +311,15 @@ export function useAgentGuideController() {
                 precision: precisionRef.current,
               }
             );
-        const { decision: next, diagnostics } = turnResult;
+        const browserProjection = ADAPTIVE_ROUTING
+          ? projectAdaptiveTurnForBrowser(turnResult, manifest)
+          : null;
+        const next = browserProjection?.decision ?? turnResult.decision;
+        const diagnostics = browserProjection?.diagnostics ?? turnResult.diagnostics;
         if (sessionRef.current !== mySession) return; // superseded
         if (ADAPTIVE_ROUTING) {
-          turnTokenRef.current = "turnToken" in turnResult && typeof turnResult.turnToken === "string"
-            ? turnResult.turnToken
+          turnTokenRef.current = browserProjection?.kind === "ask"
+            ? browserProjection.turnToken
             : "";
           const { selections: acceptedSelections, freeTexts: acceptedFreeTexts } = buildRenderInputs(
             nextHistory,
@@ -317,6 +328,7 @@ export function useAgentGuideController() {
           setHistory(nextHistory);
           setSelections(acceptedSelections);
           setFreeTexts(acceptedFreeTexts);
+          setAdaptiveProjection(browserProjection);
           pendingHistoryRef.current = null;
         }
 
@@ -393,7 +405,9 @@ export function useAgentGuideController() {
         }
       } catch (e) {
         if (sessionRef.current !== mySession) return;
-        setError(e instanceof Error ? e.message : String(e));
+        setError(ADAPTIVE_ROUTING
+          ? projectAdaptiveErrorForBrowser(e).message
+          : e instanceof Error ? e.message : String(e));
       } finally {
         if (sessionRef.current === mySession) setLoading(false);
       }
@@ -414,6 +428,7 @@ export function useAgentGuideController() {
       setHistory([]);
       setSelections({});
       setDecision(null);
+      setAdaptiveProjection(null);
       setDecisionSource(null);
       setDraft([]);
       setDraftText("");
@@ -449,6 +464,7 @@ export function useAgentGuideController() {
       setHistory([]);
       setSelections({});
       setDecision(null);
+      setAdaptiveProjection(null);
       setDecisionSource(null);
       setDraft([]);
       setDraftText("");
@@ -468,17 +484,16 @@ export function useAgentGuideController() {
   );
 
   const currentDimension = useMemo(
-    () =>
-      decision ? manifest.find((d) => d.questionId === decision.nextQuestionId) ?? null : null,
-    [decision, manifest]
+    () => ADAPTIVE_ROUTING
+      ? adaptiveProjection?.kind === "ask" ? adaptiveProjection.dimension : null
+      : decision ? manifest.find((d) => d.questionId === decision.nextQuestionId) ?? null : null,
+    [adaptiveProjection, decision, manifest]
   );
 
   const visibleOptions = useMemo(() => {
     if (!decision || !currentDimension) return [];
     if (ADAPTIVE_ROUTING) {
-      return decision.visibleOptionIds
-        .map((id) => currentDimension.options.find((option) => option.id === id))
-        .filter((option): option is NonNullable<typeof option> => Boolean(option));
+      return adaptiveProjection?.kind === "ask" ? adaptiveProjection.options : [];
     }
     const { visible } = resolveVisibleOptions(
       currentDimension,
@@ -486,7 +501,7 @@ export function useAgentGuideController() {
       selectedOptionIds(selections),
     );
     return visible;
-  }, [decision, currentDimension, selections]);
+  }, [adaptiveProjection, decision, currentDimension, selections]);
 
   // Options recommended by the audit associations given prior picks ("推荐" badge).
   // On the subject question (first turn), also derive suggestions from the description
@@ -642,6 +657,7 @@ export function useAgentGuideController() {
     setHistory([]);
     setSelections({});
     setDecision(null);
+    setAdaptiveProjection(null);
     setDraft([]);
     setDraftText("");
     setFreeTexts({});

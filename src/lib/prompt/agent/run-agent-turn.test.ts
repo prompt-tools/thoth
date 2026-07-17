@@ -236,6 +236,7 @@ describe("requestAdaptiveTurn", () => {
         done: false,
       },
       diagnostics: { source: "model" },
+      turnToken: "signed-ask",
     })));
 
     const result = await requestAdaptiveTurn("secret", {
@@ -276,5 +277,45 @@ describe("requestAdaptiveTurn", () => {
 
     const [, init] = fetcher.mock.calls[0] as [string, RequestInit];
     expect(JSON.parse(init.body as string)).toMatchObject({ turnToken: "signed-ask" });
+  });
+
+  it("rejects a success response that is not the exact Adaptive shape", async () => {
+    const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      decision: {
+        nextQuestionId: "scene",
+        questionText: "背景在哪里？",
+        visibleOptionIds: ["a", "b", "c"],
+        done: false,
+      },
+      diagnostics: { source: "model" },
+      turnToken: "signed-ask",
+    })));
+
+    await expect(requestAdaptiveTurn("secret", {
+      subjectBrief: "雨夜女侦探",
+      history: [],
+      precision: "simple",
+    }, fetcher)).rejects.toMatchObject({
+      name: "AdaptiveRouteError",
+      code: "adaptive_route_invalid_payload",
+    });
+  });
+
+  it("throws a typed route error for a hard HTTP failure", async () => {
+    const fetcher = vi.fn().mockResolvedValue(new Response(
+      JSON.stringify({ error: "history_budget_exhausted" }),
+      { status: 409 },
+    ));
+
+    await expect(requestAdaptiveTurn("secret", {
+      subjectBrief: "雨夜女侦探",
+      history: [],
+      precision: "simple",
+    }, fetcher)).rejects.toMatchObject({
+      name: "AdaptiveRouteError",
+      code: "history_budget_exhausted",
+      status: 409,
+      retryable: false,
+    });
   });
 });

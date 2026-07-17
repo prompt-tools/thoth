@@ -27,7 +27,7 @@ describe("useAgentGuideController Adaptive answer lifecycle", () => {
     const framingIds = [
       "image_framing:close_up",
       "image_framing:medium_shot",
-      "image_framing:full_body",
+      "image_framing:wide_shot",
     ];
     clientMocks.requestAdaptiveTurn
       .mockResolvedValueOnce({
@@ -49,7 +49,7 @@ describe("useAgentGuideController Adaptive answer lifecycle", () => {
           helperText: "决定透视与空间感。",
           visibleOptionIds: [
             "image_camera:35mm_wide",
-            "image_camera:50mm_natural",
+            "image_camera:50mm_standard",
             "image_camera:85mm_portrait",
           ],
           done: false,
@@ -85,5 +85,73 @@ describe("useAgentGuideController Adaptive answer lifecycle", () => {
 
     expect(clientMocks.requestAdaptiveTurn.mock.calls[2][1]).toEqual(pendingInput);
     expect(result.current.history).toEqual(pendingInput.history);
+  });
+
+  it("does not commit an answer or replacement token when browser projection rejects a success payload", async () => {
+    const framingIds = [
+      "image_framing:close_up",
+      "image_framing:medium_shot",
+      "image_framing:wide_shot",
+    ];
+    clientMocks.requestAdaptiveTurn
+      .mockResolvedValueOnce({
+        decision: {
+          nextQuestionId: "framing",
+          questionText: "取景范围？",
+          helperText: "决定人物与背景的比例。",
+          visibleOptionIds: framingIds,
+          done: false,
+        },
+        diagnostics: { source: "model" },
+        turnToken: "signed-turn-1",
+      })
+      .mockResolvedValueOnce({
+        decision: {
+          nextQuestionId: "camera",
+          questionText: "镜头语言？",
+          helperText: "决定透视与空间感。",
+          visibleOptionIds: [
+            "image_camera:35mm_wide",
+            "image_camera:missing",
+            "image_camera:85mm_portrait",
+          ],
+          done: false,
+        },
+        diagnostics: { source: "model" },
+        turnToken: "untrusted-turn-2",
+      })
+      .mockResolvedValueOnce({
+        decision: {
+          nextQuestionId: "camera",
+          questionText: "镜头语言？",
+          helperText: "决定透视与空间感。",
+          visibleOptionIds: [
+            "image_camera:35mm_wide",
+            "image_camera:50mm_standard",
+            "image_camera:85mm_portrait",
+          ],
+          done: false,
+        },
+        diagnostics: { source: "model" },
+        turnToken: "signed-turn-2",
+      });
+    const { useAgentGuideController } = await import("./use-agent-guide-controller");
+    const { result } = renderHook(() => useAgentGuideController());
+
+    act(() => result.current.startWithDescription("窗边的女学生"));
+    await waitFor(() => expect(result.current.decision?.nextQuestionId).toBe("framing"));
+
+    act(() => result.current.toggleDraft(framingIds[0]));
+    act(() => result.current.submitStep());
+    await waitFor(() => expect(result.current.error).toContain("未知选项"));
+    expect(result.current.history).toEqual([]);
+
+    act(() => result.current.retryStep());
+    await waitFor(() => expect(result.current.decision?.nextQuestionId).toBe("camera"));
+
+    expect(clientMocks.requestAdaptiveTurn.mock.calls[2][1]).toMatchObject({
+      turnToken: "signed-turn-1",
+      history: [{ questionId: "framing", selectedOptionIds: [framingIds[0]] }],
+    });
   });
 });
