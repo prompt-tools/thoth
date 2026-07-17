@@ -32,7 +32,7 @@ src/
 │   ├── page.tsx                      # Home = the portrait prompt wizard
 │   └── api/
 │       ├── llm/route.ts              # Server proxy → model provider (built-in key)
-│       └── telemetry/route.ts        # Per-step session recording → Langfuse
+│       └── telemetry/route.ts        # Signed content-free outcome events → Upstash
 ├── components/prompt-guide/
 │   ├── agent-demo-client.tsx         # Wizard UI (describe → ask → done)
 │   ├── use-agent-guide-controller.ts # Flow state, fetch-next, auto-fill, telemetry
@@ -62,8 +62,7 @@ Server-only env vars (never `NEXT_PUBLIC_`, never in the browser bundle):
 | `JOURNEY_RELEASE` | Stable release identifier used in signed Journey claims and Canary assignment; falls back to `VERCEL_GIT_COMMIT_SHA`, then `local` |
 | `ADAPTIVE_CANARY_EXPOSURE=0|10|50|100` | Percentage of new Built-in Journeys assigned to Adaptive; defaults to `0` |
 | `ADAPTIVE_ROUTING_ENABLED=1` | Allow non-zero Adaptive exposure and the legacy BYOK Adaptive boundary; absent forces new Built-in Journeys to fixed |
-| `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` | Durable server-only store for content-free Journey attempt lifecycles; Built-in provider calls fail closed when unavailable |
-| `LANGFUSE_BASE_URL` / `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` | Telemetry sink; absent → telemetry is a no-op |
+| `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` | Durable server-only store for content-free Journey attempt lifecycles and outcome events; Built-in provider calls fail closed when unavailable |
 
 Public build-time flags:
 
@@ -71,6 +70,22 @@ Public build-time flags:
 |-----|---------|
 | `NEXT_PUBLIC_AGENT_DEMO_BUILTIN=1` | Skip the BYOK key gate and use the built-in key |
 | `NEXT_PUBLIC_ADAPTIVE_ROUTING=1` | Enable the legacy BYOK Adaptive boundary; Built-in cohort routing is server-owned |
+
+### Public outcome events
+
+`/api/telemetry` accepts only three content-free event types. Each must match the
+state in the current server-signed Journey token:
+
+| Event | Required signed state |
+|-------|-----------------------|
+| `answer_submitted` | `ask` |
+| `turn_skipped` | `ask` |
+| `prompt_rendered` | `done` |
+
+The server derives Journey, release, route, turn, state, and question identity
+from the token. Other client fields are discarded. Subject descriptions, free
+text, answer history, provider output, and final prompts are never stored by
+this boundary.
 
 ## Commands / 命令
 

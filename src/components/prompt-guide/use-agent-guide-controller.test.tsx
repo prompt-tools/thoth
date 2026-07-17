@@ -30,6 +30,7 @@ describe("useAgentGuideController Adaptive answer lifecycle", () => {
 
   afterEach(() => {
     vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
   });
 
   it("lets free text override selected cards and retries the same pending signed answer", async () => {
@@ -182,6 +183,7 @@ describe("useAgentGuideController Built-in Journey routing", () => {
 
   afterEach(() => {
     vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
   });
 
   it("carries the latest token while obeying the server-selected fixed route", async () => {
@@ -326,5 +328,73 @@ describe("useAgentGuideController Built-in Journey routing", () => {
     expect(clientMocks.polishPrompt.mock.calls[0][2]).toMatchObject({
       journey: { id: "journey-1", token: "journey-token-2" },
     });
+  });
+
+  it.each([
+    { action: "submit", eventType: "answer_submitted" },
+    { action: "skip", eventType: "turn_skipped" },
+  ])("reports $eventType without blocking the Journey when delivery fails", async ({ action, eventType }) => {
+    const fetchSpy = vi.fn().mockRejectedValue(new Error("telemetry unavailable"));
+    vi.stubGlobal("fetch", fetchSpy);
+    Object.defineProperty(navigator, "sendBeacon", { configurable: true, value: undefined });
+    const framingIds = [
+      "image_framing:close_up",
+      "image_framing:medium_shot",
+      "image_framing:wide_shot",
+    ];
+    clientMocks.requestJourneyTurn
+      .mockResolvedValueOnce({
+        journey: { id: "journey-1", route: "fixed", token: "journey-token-1" },
+        decision: { nextQuestionId: "framing", visibleOptionIds: framingIds, done: false },
+        diagnostics: { source: "ordered", fallbackUsed: false },
+      })
+      .mockResolvedValueOnce({
+        journey: { id: "journey-1", route: "fixed", token: "journey-token-2" },
+        decision: { nextQuestionId: "framing", visibleOptionIds: [], done: true },
+        diagnostics: { source: "remainingEmpty", fallbackUsed: false },
+      });
+    const { useAgentGuideController } = await import("./use-agent-guide-controller");
+    const { result } = renderHook(() => useAgentGuideController());
+
+    act(() => result.current.startWithDescription("窗边的女学生"));
+    await waitFor(() => expect(result.current.decision?.nextQuestionId).toBe("framing"));
+    if (action === "submit") {
+      act(() => result.current.toggleDraft(framingIds[0]));
+      act(() => result.current.submitStep());
+    } else {
+      act(() => result.current.skipStep());
+    }
+
+    if (action === "submit") {
+      await waitFor(() => expect(result.current.phase).toBe("done"));
+    } else {
+      await waitFor(() => expect(clientMocks.requestJourneyTurn).toHaveBeenCalledTimes(2));
+    }
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(action === "submit" ? 4 : 2));
+    const payloads = fetchSpy.mock.calls.map((call) => JSON.parse(String(call[1]?.body)));
+    expect(payloads).toEqual([
+      {
+        journeyId: "journey-1",
+        journeyToken: "journey-token-1",
+        eventType,
+      },
+      {
+        journeyId: "journey-1",
+        journeyToken: "journey-token-1",
+        eventType,
+      },
+      ...(action === "submit" ? [
+        {
+          journeyId: "journey-1",
+          journeyToken: "journey-token-2",
+          eventType: "prompt_rendered",
+        },
+        {
+          journeyId: "journey-1",
+          journeyToken: "journey-token-2",
+          eventType: "prompt_rendered",
+        },
+      ] : []),
+    ]);
   });
 });

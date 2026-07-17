@@ -151,15 +151,11 @@ function DescribeStep({
   onStart,
   precision,
   onPrecisionChange,
-  telemetryEnabled,
-  onTelemetryChange,
   requireDescription,
 }: {
   onStart: (text: string) => void;
   precision: Precision;
   onPrecisionChange: (p: Precision) => void;
-  telemetryEnabled: boolean;
-  onTelemetryChange: (enabled: boolean) => void;
   requireDescription: boolean;
 }) {
   const [text, setText] = useState("");
@@ -183,15 +179,6 @@ function DescribeStep({
         placeholder="例如：银发游戏角色立绘，清冷神秘，夜色城堡背景"
         className="mt-3 w-full resize-y rounded-md border border-slate-300 px-3 py-2 text-sm leading-6 focus:border-slate-900 focus:outline-none"
       />
-      <label className="mt-3 flex items-start gap-2 text-xs leading-5 text-slate-600">
-        <input
-          type="checkbox"
-          checked={telemetryEnabled}
-          onChange={(event) => onTelemetryChange(event.target.checked)}
-          className="mt-1"
-        />
-        <span>同意上传本次描述、选择和生成结果，用于改进向导。未勾选时不会上传。</span>
-      </label>
       <div className="mt-4 flex flex-wrap items-center gap-3">
         <Button
           type="button"
@@ -354,8 +341,6 @@ function AgentDemo() {
     autoFilledSummary,
     builtinDemo,
     adaptiveRouting,
-    telemetryEnabled,
-    setTelemetryEnabled,
   } = useAgentGuideController();
 
   if (phase === "needsKey") {
@@ -451,8 +436,6 @@ function AgentDemo() {
             onStart={startWithDescription}
             precision={precision}
             onPrecisionChange={setPrecision}
-            telemetryEnabled={telemetryEnabled}
-            onTelemetryChange={setTelemetryEnabled}
             requireDescription={adaptiveRouting}
           />
         ) : null}
