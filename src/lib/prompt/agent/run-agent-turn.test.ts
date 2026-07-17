@@ -91,6 +91,28 @@ describe("runAgentTurn (C-9b gradient)", () => {
     );
   });
 
+  it("terminalizes a null provider document as validation failure", async () => {
+    const finish = vi.fn(async () => undefined);
+    const result = await runAgentTurn(
+      provider,
+      "test-key",
+      { manifest, history: [], userDescription: "" },
+      async () => null,
+      {
+        attemptLifecycle: {
+          start: async () => ({ attemptId: "attempt-null", startedAt: 1 }),
+          finish,
+        },
+      },
+    );
+
+    expect(result.decision.done).toBe(false);
+    expect(finish).toHaveBeenCalledWith(
+      expect.any(Object),
+      { outcome: "failure", failureCode: "validation_no_valid_options" },
+    );
+  });
+
   // ① pool = activeDimensions, nextQuestionId = ordered[0]
   it("① nextQuestionId === ordered[0]", async () => {
     const dim = manifest.find((d) => d.questionId === "subject")!;

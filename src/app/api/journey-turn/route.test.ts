@@ -202,6 +202,56 @@ describe("POST /api/journey-turn", () => {
     })]);
   });
 
+  it("classifies cancellation while reading a fixed response body without retrying", async () => {
+    vi.stubEnv("ADAPTIVE_TURN_SECRET", "a-strong-test-secret-with-at-least-32-bytes");
+    vi.stubEnv("JOURNEY_RELEASE", "release-a");
+    vi.stubEnv("ADAPTIVE_CANARY_EXPOSURE", "0");
+    vi.stubEnv("DEMO_DEEPSEEK_KEY", "server-key");
+    vi.stubEnv("UPSTASH_REDIS_REST_URL", "https://example.upstash.io");
+    vi.stubEnv("UPSTASH_REDIS_REST_TOKEN", "redis-token");
+    const caller = new AbortController();
+    const terminals: Array<Record<string, unknown>> = [];
+    let providerCalls = 0;
+    let responseStarted = false;
+    const fetchSpy = vi.fn().mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === "https://example.upstash.io") {
+        const command = JSON.parse(String(init?.body)) as string[];
+        if (command[1].includes("PEXPIREAT")) return Response.json({ result: "created" });
+        terminals.push(JSON.parse(command[4]) as Record<string, unknown>);
+        return Response.json({ result: "written" });
+      }
+      providerCalls += 1;
+      const providerSignal = init?.signal as AbortSignal;
+      if (providerSignal.aborted) throw new DOMException("aborted", "AbortError");
+      return new Response(new ReadableStream({
+        start(controller) {
+          responseStarted = true;
+          providerSignal.addEventListener("abort", () => {
+            controller.error(new DOMException("aborted", "AbortError"));
+          }, { once: true });
+        },
+      }));
+    });
+    vi.stubGlobal("fetch", fetchSpy);
+    const responsePromise = POST(new Request("http://localhost/api/journey-turn", {
+      method: "POST",
+      headers: { authorization: "Bearer __demo__", "content-type": "application/json" },
+      body: JSON.stringify({ subjectBrief: "原创游侠角色", history: [], precision: "simple" }),
+      signal: caller.signal,
+    }));
+
+    await vi.waitFor(() => expect(responseStarted).toBe(true));
+    caller.abort();
+    const response = await responsePromise;
+
+    expect(response.status).toBe(200);
+    expect(providerCalls).toBe(1);
+    expect(terminals).toEqual([expect.objectContaining({
+      outcome: "failure",
+      failureCode: "provider_cancelled",
+    })]);
+  });
+
   it("records an Adaptive production call from Started through validated Ask", async () => {
     vi.stubEnv("ADAPTIVE_TURN_SECRET", "a-strong-test-secret-with-at-least-32-bytes");
     vi.stubEnv("JOURNEY_RELEASE", "release-a");

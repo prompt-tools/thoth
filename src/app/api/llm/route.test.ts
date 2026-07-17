@@ -268,6 +268,56 @@ describe("POST /api/llm", () => {
     }));
   });
 
+  it("classifies cancellation while reading a Built-in response body", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1_700_000_000_000);
+    vi.stubEnv("DEMO_DEEPSEEK_KEY", "server-key");
+    vi.stubEnv("ADAPTIVE_TURN_SECRET", SECRET);
+    vi.stubEnv("UPSTASH_REDIS_REST_URL", "https://example.upstash.io");
+    vi.stubEnv("UPSTASH_REDIS_REST_TOKEN", "redis-token");
+    const caller = new AbortController();
+    let terminal: unknown;
+    let responseStarted = false;
+    const fetchSpy = vi.fn().mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === "https://example.upstash.io") {
+        const command = JSON.parse(String(init?.body)) as string[];
+        if (command[1].includes("PEXPIREAT")) return Response.json({ result: "created" });
+        terminal = JSON.parse(command[4]);
+        return Response.json({ result: "written" });
+      }
+      const providerSignal = init?.signal as AbortSignal;
+      return new Response(new ReadableStream({
+        start(controller) {
+          responseStarted = true;
+          providerSignal.addEventListener("abort", () => {
+            controller.error(new DOMException("aborted", "AbortError"));
+          }, { once: true });
+        },
+      }));
+    });
+    vi.stubGlobal("fetch", fetchSpy);
+    const responsePromise = POST(new Request("http://localhost/api/llm", {
+      method: "POST",
+      body: JSON.stringify({
+        endpoint: "https://api.deepseek.com/chat/completions",
+        headers: { authorization: "Bearer __demo__" },
+        body: { messages: [] },
+        journey: signedJourney(),
+      }),
+      signal: caller.signal,
+    }));
+
+    await vi.waitFor(() => expect(responseStarted).toBe(true));
+    caller.abort();
+    const response = await responsePromise;
+
+    expect(response.status).toBe(502);
+    expect(terminal).toEqual(expect.objectContaining({
+      outcome: "failure",
+      failureCode: "provider_cancelled",
+    }));
+  });
+
   it("enforces the request ceiling in UTF-8 bytes", async () => {
     vi.stubEnv("DEMO_DEEPSEEK_KEY", "server-key");
     const fetchSpy = vi.fn();

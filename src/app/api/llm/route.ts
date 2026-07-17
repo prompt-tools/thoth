@@ -168,6 +168,7 @@ export async function POST(request: Request) {
   }, 30_000);
   try {
     let upstream: Response;
+    let text: string;
     try {
       upstream = await fetch(url.toString(), {
         method: "POST",
@@ -176,6 +177,7 @@ export async function POST(request: Request) {
         redirect: "error",
         signal: ac.signal,
       });
+      text = await upstream.text();
     } catch {
       const failureCode = timedOut
         ? "provider_timeout"
@@ -183,7 +185,6 @@ export async function POST(request: Request) {
       if (attempt) await attemptLifecycle!.finish(attempt, { outcome: "failure", failureCode });
       return NextResponse.json({ error: `Upstream fetch failed: ${failureCode}` }, { status: 502 });
     }
-    const text = await upstream.text();
     if (attempt) {
       if (!upstream.ok) {
         await attemptLifecycle!.finish(attempt, {

@@ -27,6 +27,7 @@ async function fixedTransport(request: ProxyRequest, callerSignal?: AbortSignal)
   }, 30_000);
   try {
     let response: Response;
+    let text: string;
     try {
       response = await fetch(request.endpoint, {
         method: "POST",
@@ -35,6 +36,7 @@ async function fixedTransport(request: ProxyRequest, callerSignal?: AbortSignal)
         redirect: "error",
         signal: controller.signal,
       });
+      text = await response.text();
     } catch (error) {
       if (timedOut) throw new ProviderTransportError("provider_timeout");
       if (callerCancelled || (error instanceof DOMException && error.name === "AbortError")) {
@@ -42,7 +44,6 @@ async function fixedTransport(request: ProxyRequest, callerSignal?: AbortSignal)
       }
       throw new ProviderTransportError("network_error");
     }
-    const text = await response.text();
     if (!response.ok) throw new ProviderTransportError(`http_${response.status}`, response.status);
     try {
       return JSON.parse(text);

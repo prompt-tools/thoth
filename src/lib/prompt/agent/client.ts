@@ -220,6 +220,7 @@ function extractToolInput(
   resp: unknown,
   toolName: string
 ): unknown {
+  if (typeof resp !== "object" || resp === null) return undefined;
   if (provider.format === "anthropic") {
     const content = (resp as { content?: Array<{ type: string; name?: string; input?: unknown }> })
       .content;
