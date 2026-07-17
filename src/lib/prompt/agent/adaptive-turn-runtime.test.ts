@@ -11,7 +11,7 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-function adaptiveRequest(body: unknown): Request {
+function adaptiveRequest(body: unknown, signal?: AbortSignal): Request {
   return new Request("http://localhost/api/adaptive-turn", {
     method: "POST",
     headers: {
@@ -19,10 +19,135 @@ function adaptiveRequest(body: unknown): Request {
       "content-type": "application/json",
     },
     body: JSON.stringify(body),
+    signal,
   });
 }
 
 describe("handleAdaptiveTurnRequest", () => {
+  it("records one terminal failure around an accepted Adaptive provider call", async () => {
+    const events: string[] = [];
+    const attemptLifecycle = {
+      start: vi.fn(async () => {
+        events.push("started");
+        return { attemptId: "attempt-adaptive-1", startedAt: 1_700_000_000_000 };
+      }),
+      finish: vi.fn(async (_attempt: unknown, terminal: unknown) => {
+        events.push("terminal");
+        expect(terminal).toEqual({
+          outcome: "failure",
+          failureCode: "http_429",
+          providerStatus: 429,
+        });
+      }),
+    };
+    const response = await handleAdaptiveTurnRequest(adaptiveRequest({
+      subjectBrief: "原创游侠角色",
+      history: [],
+      precision: "simple",
+    }), {
+      enabled: true,
+      turnSecret: TURN_SECRET,
+      now: () => 1_700_000_000_000,
+      attemptLifecycle,
+      exchange: async () => {
+        events.push("provider");
+        return {
+          kind: "http",
+          status: 429,
+          headers: {},
+          body: new Uint8Array(),
+        };
+      },
+    } as AdaptiveTurnRuntimeDeps);
+
+    expect(response.status).toBe(200);
+    expect(events).toEqual(["started", "provider", "terminal"]);
+    expect(attemptLifecycle.finish).toHaveBeenCalledTimes(1);
+  });
+
+  it("records a server-validated Adaptive Completion without provider content", async () => {
+    const attemptLifecycle = {
+      start: vi.fn(async () => ({ attemptId: "attempt-completion", startedAt: 1_700_000_000_000 })),
+      finish: vi.fn(async () => undefined),
+    };
+    const response = await handleAdaptiveTurnRequest(adaptiveRequest({
+      subjectBrief: "女船长怒视镜头，低机位，电影海报",
+      history: [],
+      precision: "simple",
+    }), {
+      enabled: true,
+      turnSecret: TURN_SECRET,
+      now: () => 1_700_000_000_000,
+      attemptLifecycle,
+      exchange: async () => ({
+        kind: "http",
+        status: 200,
+        headers: {},
+        body: new TextEncoder().encode(JSON.stringify({
+          choices: [{
+            finish_reason: "tool_calls",
+            message: { tool_calls: [{ function: {
+              name: "decide_adaptive_turn",
+              arguments: JSON.stringify({
+                done: true,
+                nextQuestionId: null,
+                questionText: null,
+                helperText: null,
+                optionIds: [],
+              }),
+            } }] },
+          }],
+        })),
+      }),
+    });
+
+    expect(await response.json()).toMatchObject({ decision: { done: true } });
+    expect(attemptLifecycle.finish).toHaveBeenCalledWith(
+      { attemptId: "attempt-completion", startedAt: 1_700_000_000_000 },
+      { outcome: "success", validation: "completion" },
+    );
+  });
+
+  it("propagates caller cancellation and records it as a distinct terminal failure", async () => {
+    vi.useFakeTimers();
+    const caller = new AbortController();
+    let providerSignal: AbortSignal | undefined;
+    const attemptLifecycle = {
+      start: vi.fn(async () => ({ attemptId: "attempt-cancelled", startedAt: 1_700_000_000_000 })),
+      finish: vi.fn(async () => undefined),
+    };
+    const responsePromise = handleAdaptiveTurnRequest(adaptiveRequest({
+      subjectBrief: "原创游侠角色",
+      history: [],
+      precision: "simple",
+    }, caller.signal), {
+      enabled: true,
+      turnSecret: TURN_SECRET,
+      now: () => 1_700_000_000_000,
+      attemptLifecycle,
+      exchange: ({ signal }) => {
+        providerSignal = signal;
+        return new Promise((resolve) => {
+          signal.addEventListener("abort", () => resolve({
+            kind: "network",
+            reason: "provider_cancelled",
+          }), { once: true });
+          setTimeout(() => resolve({ kind: "network", reason: "network_error" }), 1);
+        });
+      },
+    });
+
+    await vi.advanceTimersByTimeAsync(0);
+    caller.abort();
+    await vi.advanceTimersByTimeAsync(1);
+    await responsePromise;
+    expect(providerSignal?.aborted).toBe(true);
+    expect(attemptLifecycle.finish).toHaveBeenCalledWith(
+      expect.any(Object),
+      { outcome: "failure", failureCode: "provider_cancelled" },
+    );
+  });
+
   it("passes a recorded HTTP outcome through the production fallback boundary", async () => {
     const now = vi.fn(() => 1_700_000_000_000);
     const exchange = vi.fn<AdaptiveTurnRuntimeDeps["exchange"]>(async (request) => {
@@ -131,6 +256,10 @@ describe("handleAdaptiveTurnRequest", () => {
   it("aborts an in-flight provider exchange at the shared 30-second deadline", async () => {
     vi.useFakeTimers();
     let providerSignal: AbortSignal | undefined;
+    const attemptLifecycle = {
+      start: vi.fn(async () => ({ attemptId: "attempt-timeout", startedAt: 1_700_000_000_000 })),
+      finish: vi.fn(async () => undefined),
+    };
     const responsePromise = handleAdaptiveTurnRequest(adaptiveRequest({
       subjectBrief: "原创游侠角色",
       history: [],
@@ -139,6 +268,7 @@ describe("handleAdaptiveTurnRequest", () => {
       enabled: true,
       turnSecret: TURN_SECRET,
       now: () => 1_700_000_000_000,
+      attemptLifecycle,
       exchange: ({ signal }) => {
         providerSignal = signal;
         return new Promise((_resolve, reject) => {
@@ -147,6 +277,9 @@ describe("handleAdaptiveTurnRequest", () => {
       },
     });
 
+    await vi.advanceTimersByTimeAsync(0);
+    expect(attemptLifecycle.start).toHaveBeenCalledTimes(1);
+    expect(attemptLifecycle.finish).not.toHaveBeenCalled();
     await vi.advanceTimersByTimeAsync(30_000);
     const response = await responsePromise;
 
@@ -154,6 +287,10 @@ describe("handleAdaptiveTurnRequest", () => {
     expect(await response.json()).toMatchObject({
       diagnostics: { source: "fallback", reason: "adaptive_turn_timeout" },
     });
+    expect(attemptLifecycle.finish).toHaveBeenCalledWith(
+      expect.any(Object),
+      { outcome: "failure", failureCode: "adaptive_turn_timeout" },
+    );
   });
 
   it("preserves raw provider evidence without changing a valid model decision", async () => {

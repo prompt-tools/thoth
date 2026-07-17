@@ -4,6 +4,10 @@ import {
   handleJourneyTurnRequest,
   type JourneyTurnRuntimeDeps,
 } from "./journey-turn-runtime";
+import { buildTurnRequest, ProviderTransportError } from "./client";
+import { buildAdaptiveTurnSnapshot } from "./adaptive-turn";
+import { buildCatalogManifest } from "./catalog-manifest";
+import { getProvider } from "./providers";
 
 const SECRET = "a-strong-test-secret-with-at-least-32-bytes";
 
@@ -15,7 +19,313 @@ function request(body: unknown): Request {
   });
 }
 
+function attemptDeps(): Pick<JourneyTurnRuntimeDeps, "newAttemptId" | "attemptStore"> {
+  let sequence = 0;
+  return {
+    newAttemptId: () => `attempt-${++sequence}`,
+    attemptStore: {
+      start: async () => "created",
+      finish: async () => "written",
+    },
+  };
+}
+
+function fixedModelResponse(subjectBrief = "原创游侠角色") {
+  const { ctx } = buildTurnRequest(getProvider("deepseek"), "server-key", {
+    manifest: buildCatalogManifest(),
+    history: [],
+    userDescription: subjectBrief,
+    precision: "simple",
+  });
+  return {
+    choices: [{
+      message: { tool_calls: [{ function: { arguments: JSON.stringify({
+        visibleOptionIds: ctx.filteredCurrentOptionIds.slice(0, 3),
+        helperText: "选择角色的核心气质。",
+      }) } }] },
+    }],
+  };
+}
+
 describe("Built-in Journey HTTP boundary", () => {
+  it("persists a content-free fixed attempt before the provider and finalizes the validated Ask", async () => {
+    const events: string[] = [];
+    const started: unknown[] = [];
+    const terminal: unknown[] = [];
+    const attemptStore = {
+      start: vi.fn(async (record: unknown) => {
+        events.push("started");
+        started.push(record);
+        return "created" as const;
+      }),
+      finish: vi.fn(async (_attemptId: string, record: unknown) => {
+        events.push("terminal");
+        terminal.push(record);
+        return "written" as const;
+      }),
+    };
+    const fixedTransport = vi.fn<JourneyTurnRuntimeDeps["fixedTransport"]>(async () => {
+      events.push("provider");
+      return {
+        ...fixedModelResponse("不要把这段主体描述写进 attempt"),
+        usage: { prompt_tokens: 20, completion_tokens: 8 },
+      };
+    });
+
+    const response = await handleJourneyTurnRequest(request({
+      subjectBrief: "不要把这段主体描述写进 attempt",
+      history: [],
+      precision: "simple",
+    }), {
+      secret: SECRET,
+      release: "release-a",
+      exposure: "0",
+      demoKey: "server-key",
+      now: () => 1_700_000_000_000,
+      newJourneyId: () => "journey-1",
+      newAttemptId: () => "attempt-1",
+      attemptStore,
+      fixedTransport,
+      adaptiveExchange: vi.fn(),
+    } as JourneyTurnRuntimeDeps);
+
+    expect(response.status).toBe(200);
+    expect(events).toEqual(["started", "provider", "terminal"]);
+    expect(started).toEqual([expect.objectContaining({
+      attemptId: "attempt-1",
+      journeyId: "journey-1",
+      release: "release-a",
+      route: "fixed",
+      cohort: "fixed",
+      turn: 0,
+      expiresAt: 1_702_592_000_000,
+    })]);
+    expect(terminal).toEqual([expect.objectContaining({
+      outcome: "success",
+      validation: "ask",
+      usage: { promptTokens: 20, completionTokens: 8 },
+    })]);
+    expect(JSON.stringify({ started, terminal })).not.toContain("不要把这段主体描述写进 attempt");
+  });
+
+  it("uses a distinct attempt for every fixed provider retry", async () => {
+    const started: Array<{ attemptId: string }> = [];
+    const terminal: Array<{ attemptId: string; record: Record<string, unknown> }> = [];
+    let sequence = 0;
+    let call = 0;
+    const response = await handleJourneyTurnRequest(request({
+      subjectBrief: "原创游侠角色",
+      history: [],
+      precision: "simple",
+    }), {
+      secret: SECRET,
+      release: "release-a",
+      exposure: "0",
+      demoKey: "server-key",
+      now: () => 1_700_000_000_000,
+      newJourneyId: () => "journey-1",
+      newAttemptId: () => `attempt-${++sequence}`,
+      attemptStore: {
+        start: async (record) => {
+          started.push(record);
+          return "created";
+        },
+        finish: async (attemptId, record) => {
+          terminal.push({ attemptId, record });
+          return "written";
+        },
+      },
+      fixedTransport: async () => {
+        call += 1;
+        if (call === 1) throw new ProviderTransportError("http_503", 503);
+        if (call === 2) throw new ProviderTransportError("network_error");
+        return fixedModelResponse();
+      },
+      adaptiveExchange: vi.fn(),
+    });
+
+    expect(response.status).toBe(200);
+    expect(started.map((record) => record.attemptId)).toEqual([
+      "attempt-1", "attempt-2", "attempt-3",
+    ]);
+    expect(terminal).toEqual([
+      { attemptId: "attempt-1", record: expect.objectContaining({ outcome: "failure", failureCode: "http_503", providerStatus: 503 }) },
+      { attemptId: "attempt-2", record: expect.objectContaining({ outcome: "failure", failureCode: "network_error" }) },
+      { attemptId: "attempt-3", record: expect.objectContaining({ outcome: "success", validation: "ask" }) },
+    ]);
+  });
+
+  it("fails closed before the provider when Started cannot be persisted", async () => {
+    const fixedTransport = vi.fn<JourneyTurnRuntimeDeps["fixedTransport"]>();
+    const response = await handleJourneyTurnRequest(request({
+      subjectBrief: "原创游侠角色",
+      history: [],
+      precision: "simple",
+    }), {
+      secret: SECRET,
+      release: "release-a",
+      exposure: "0",
+      demoKey: "server-key",
+      now: () => 1_700_000_000_000,
+      newJourneyId: () => "journey-1",
+      newAttemptId: () => "attempt-1",
+      attemptStore: {
+        start: async () => { throw new Error("redis offline"); },
+        finish: async () => "missing",
+      },
+      fixedTransport,
+      adaptiveExchange: vi.fn(),
+    });
+
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({ error: "attempt_store_unavailable" });
+    expect(fixedTransport).not.toHaveBeenCalled();
+  });
+
+  it("rejects an observable conflicting terminal instead of replacing it", async () => {
+    const fixedTransport = vi.fn<JourneyTurnRuntimeDeps["fixedTransport"]>(async () => ({}));
+    const response = await handleJourneyTurnRequest(request({
+      subjectBrief: "原创游侠角色",
+      history: [],
+      precision: "simple",
+    }), {
+      secret: SECRET,
+      release: "release-a",
+      exposure: "0",
+      demoKey: "server-key",
+      now: () => 1_700_000_000_000,
+      newJourneyId: () => "journey-1",
+      newAttemptId: () => "attempt-1",
+      attemptStore: {
+        start: async () => "created",
+        finish: async () => "conflict",
+      },
+      fixedTransport,
+      adaptiveExchange: vi.fn(),
+    });
+
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({ error: "attempt_terminal_conflict" });
+    expect(fixedTransport).toHaveBeenCalledTimes(1);
+  });
+
+  it("links an Adaptive attempt to the authenticated Journey and validated Ask", async () => {
+    const subjectBrief = "原创游侠角色";
+    const snapshot = buildAdaptiveTurnSnapshot({ subjectBrief, history: [], precision: "simple" });
+    const dimension = snapshot.eligibleDimensions[0];
+    const started: unknown[] = [];
+    const terminal: unknown[] = [];
+    const response = await handleJourneyTurnRequest(request({
+      subjectBrief,
+      history: [],
+      precision: "simple",
+    }), {
+      secret: SECRET,
+      release: "release-a",
+      exposure: "100",
+      demoKey: "server-key",
+      now: () => 1_700_000_000_000,
+      newJourneyId: () => "journey-adaptive",
+      newAttemptId: () => "attempt-adaptive-1",
+      attemptStore: {
+        start: async (record) => {
+          started.push(record);
+          return "created";
+        },
+        finish: async (_attemptId, record) => {
+          terminal.push(record);
+          return "written";
+        },
+      },
+      fixedTransport: vi.fn(),
+      adaptiveExchange: async () => ({
+        kind: "http",
+        status: 200,
+        headers: {},
+        body: new TextEncoder().encode(JSON.stringify({
+          choices: [{
+            finish_reason: "tool_calls",
+            message: { tool_calls: [{ function: {
+              name: "decide_adaptive_turn",
+              arguments: JSON.stringify({
+                done: false,
+                nextQuestionId: dimension.questionId,
+                questionText: dimension.title,
+                helperText: dimension.helper,
+                optionIds: dimension.candidates.slice(0, 3).map((option) => option.id),
+              }),
+            } }] },
+          }],
+          usage: { prompt_tokens: 30, completion_tokens: 12 },
+        })),
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(started).toEqual([expect.objectContaining({
+      attemptId: "attempt-adaptive-1",
+      journeyId: "journey-adaptive",
+      release: "release-a",
+      route: "adaptive",
+      cohort: "adaptive",
+      turn: 0,
+    })]);
+    expect(terminal).toEqual([expect.objectContaining({
+      outcome: "success",
+      validation: "ask",
+      usage: { promptTokens: 30, completionTokens: 12 },
+    })]);
+  });
+
+  it("assigns a new attempt ID when the same signed turn is manually retried", async () => {
+    let sequence = 0;
+    const started: Array<{ attemptId: string; journeyId: string; turn: number }> = [];
+    const deps: JourneyTurnRuntimeDeps = {
+      secret: SECRET,
+      release: "release-a",
+      exposure: "0",
+      demoKey: "server-key",
+      now: () => 1_700_000_000_000,
+      newJourneyId: () => "journey-1",
+      newAttemptId: () => `attempt-${++sequence}`,
+      attemptStore: {
+        start: async (record) => {
+          started.push(record);
+          return "created";
+        },
+        finish: async () => "written",
+      },
+      fixedTransport: async () => ({}),
+      adaptiveExchange: vi.fn(),
+    };
+    const first = await (await handleJourneyTurnRequest(request({
+      subjectBrief: "原创游侠角色",
+      history: [],
+      precision: "simple",
+    }), deps)).json();
+    const retryBody = {
+      subjectBrief: "原创游侠角色",
+      history: [{
+        questionId: first.decision.nextQuestionId,
+        selectedOptionIds: [first.decision.visibleOptionIds[0]],
+      }],
+      precision: "simple",
+      journeyId: first.journey.id,
+      journeyToken: first.journey.token,
+    };
+
+    const firstTry = await handleJourneyTurnRequest(request(retryBody), deps);
+    const manualRetry = await handleJourneyTurnRequest(request(retryBody), deps);
+
+    expect(firstTry.status).toBe(200);
+    expect(manualRetry.status).toBe(200);
+    expect(started).toEqual([
+      expect.objectContaining({ attemptId: "attempt-1", journeyId: "journey-1", turn: 0 }),
+      expect.objectContaining({ attemptId: "attempt-2", journeyId: "journey-1", turn: 1 }),
+      expect.objectContaining({ attemptId: "attempt-3", journeyId: "journey-1", turn: 1 }),
+    ]);
+  });
+
   it("issues a signed fixed-cohort Journey at zero exposure", async () => {
     const fixedTransport = vi.fn<JourneyTurnRuntimeDeps["fixedTransport"]>(async () => ({
       choices: [{
@@ -43,6 +353,7 @@ describe("Built-in Journey HTTP boundary", () => {
       demoKey: "server-key",
       now: () => 1_700_000_000_000,
       newJourneyId: () => "journey-1",
+      ...attemptDeps(),
       fixedTransport,
       adaptiveExchange: vi.fn(),
     });
@@ -63,6 +374,7 @@ describe("Built-in Journey HTTP boundary", () => {
       demoKey: "server-key",
       now: () => 1_700_000_000_000,
       newJourneyId: () => "journey-1",
+      ...attemptDeps(),
       fixedTransport: vi.fn(async () => ({})),
       adaptiveExchange: vi.fn(),
     };
@@ -108,6 +420,7 @@ describe("Built-in Journey HTTP boundary", () => {
       demoKey: "server-key",
       now: () => 1_700_000_000_000,
       newJourneyId: () => "journey-adaptive",
+      ...attemptDeps(),
       fixedTransport,
       adaptiveExchange,
     };
@@ -150,6 +463,7 @@ describe("Built-in Journey HTTP boundary", () => {
         demoKey: "server-key",
         now: () => now,
         newJourneyId: () => "journey-1",
+        ...attemptDeps(),
         fixedTransport,
         adaptiveExchange: vi.fn(),
       };
@@ -201,6 +515,7 @@ describe("Built-in Journey HTTP boundary", () => {
         demoKey: "server-key",
         now: () => 1_700_000_000_000,
         newJourneyId: () => "journey-0",
+        ...attemptDeps(),
         fixedTransport: async () => ({}),
         adaptiveExchange: async () => ({ kind: "network", reason: "network_error" }),
       });
@@ -225,6 +540,7 @@ describe("Built-in Journey HTTP boundary", () => {
       demoKey: "server-key",
       now: () => 1_700_000_000_000,
       newJourneyId: () => "journey-1",
+      ...attemptDeps(),
       fixedTransport,
       adaptiveExchange,
     });

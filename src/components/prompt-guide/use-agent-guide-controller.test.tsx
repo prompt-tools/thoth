@@ -4,12 +4,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const clientMocks = vi.hoisted(() => ({
   requestAdaptiveTurn: vi.fn(),
   requestJourneyTurn: vi.fn(),
+  autoFillDimensions: vi.fn(),
+  polishPrompt: vi.fn(),
 }));
 
 vi.mock("@/lib/prompt/agent/client", async (importOriginal) => ({
   ...await importOriginal<typeof import("@/lib/prompt/agent/client")>(),
   requestAdaptiveTurn: clientMocks.requestAdaptiveTurn,
   requestJourneyTurn: clientMocks.requestJourneyTurn,
+  autoFillDimensions: clientMocks.autoFillDimensions,
+  polishPrompt: clientMocks.polishPrompt,
 }));
 
 describe("useAgentGuideController Adaptive answer lifecycle", () => {
@@ -19,6 +23,8 @@ describe("useAgentGuideController Adaptive answer lifecycle", () => {
     vi.stubEnv("NEXT_PUBLIC_ADAPTIVE_ROUTING", "1");
     clientMocks.requestAdaptiveTurn.mockReset();
     clientMocks.requestJourneyTurn.mockReset();
+    clientMocks.autoFillDimensions.mockReset().mockResolvedValue([]);
+    clientMocks.polishPrompt.mockReset().mockResolvedValue({ zh: "润色中文", en: "polished English" });
     localStorage.clear();
   });
 
@@ -169,6 +175,8 @@ describe("useAgentGuideController Built-in Journey routing", () => {
     vi.stubEnv("NEXT_PUBLIC_ADAPTIVE_ROUTING", "1");
     clientMocks.requestAdaptiveTurn.mockReset();
     clientMocks.requestJourneyTurn.mockReset();
+    clientMocks.autoFillDimensions.mockReset().mockResolvedValue([]);
+    clientMocks.polishPrompt.mockReset().mockResolvedValue({ zh: "润色中文", en: "polished English" });
     localStorage.clear();
   });
 
@@ -280,6 +288,43 @@ describe("useAgentGuideController Built-in Journey routing", () => {
         selectedOptionIds: [],
         freeText: "人物占画面三分之一，保留窗景",
       }],
+    });
+  });
+
+  it("carries the latest signed Journey into Built-in autofill and polish calls", async () => {
+    const framingIds = [
+      "image_framing:close_up",
+      "image_framing:medium_shot",
+      "image_framing:wide_shot",
+    ];
+    clientMocks.requestJourneyTurn
+      .mockResolvedValueOnce({
+        journey: { id: "journey-1", route: "fixed", token: "journey-token-1" },
+        decision: { nextQuestionId: "framing", visibleOptionIds: framingIds, done: false },
+        diagnostics: { source: "ordered", fallbackUsed: false },
+      })
+      .mockResolvedValueOnce({
+        journey: { id: "journey-1", route: "fixed", token: "journey-token-2" },
+        decision: { nextQuestionId: "framing", visibleOptionIds: [], done: true },
+        diagnostics: { source: "remainingEmpty", fallbackUsed: false },
+      });
+    const { useAgentGuideController } = await import("./use-agent-guide-controller");
+    const { result } = renderHook(() => useAgentGuideController());
+
+    act(() => result.current.startWithDescription("窗边的女学生"));
+    await waitFor(() => expect(result.current.decision?.nextQuestionId).toBe("framing"));
+    act(() => result.current.toggleDraft(framingIds[0]));
+    act(() => result.current.submitStep());
+    await waitFor(() => expect(result.current.phase).toBe("done"));
+
+    expect(clientMocks.autoFillDimensions.mock.calls[0][2]).toMatchObject({
+      journey: { id: "journey-1", token: "journey-token-2" },
+    });
+
+    act(() => { void result.current.polish(); });
+    await waitFor(() => expect(clientMocks.polishPrompt).toHaveBeenCalledTimes(1));
+    expect(clientMocks.polishPrompt.mock.calls[0][2]).toMatchObject({
+      journey: { id: "journey-1", token: "journey-token-2" },
     });
   });
 });

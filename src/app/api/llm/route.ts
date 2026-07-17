@@ -1,4 +1,13 @@
+import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
+import { extractUsage } from "@/lib/prompt/agent/client";
+import {
+  AttemptLifecycleError,
+  createProviderAttemptLifecycle,
+  type ProviderAttemptLifecycle,
+} from "@/lib/prompt/agent/attempt-lifecycle";
+import { readJourneyToken } from "@/lib/prompt/agent/journey-state";
+import { createUpstashAttemptStore } from "@/lib/prompt/agent/upstash-attempt-store";
 
 // Prototype LLM proxy: the browser can't call DeepSeek / MiMo directly (no CORS
 // headers), so we forward server-side where CORS doesn't apply. BYOK — the key
@@ -77,6 +86,8 @@ export async function POST(request: Request) {
   const fwdHeaders = { ...(headers ?? {}) } as Record<string, string>;
   const auth = (fwdHeaders.authorization ?? fwdHeaders.Authorization ?? "").trim();
   let upstreamBody = body;
+  let attemptLifecycle: ProviderAttemptLifecycle | undefined;
+  let demoJourney: unknown;
   if (auth === "Bearer __demo__") {
     const serverKey = process.env.DEMO_DEEPSEEK_KEY;
     delete fwdHeaders.Authorization;
@@ -89,6 +100,7 @@ export async function POST(request: Request) {
         stream: false,
         thinking: { type: "disabled" },
       };
+      demoJourney = payload.journey;
     } else {
       return NextResponse.json({ error: "No API key (built-in demo key unavailable for this endpoint)" }, { status: 401 });
     }
@@ -101,27 +113,120 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Request body too large" }, { status: 413 });
   }
 
-  const ac = new AbortController();
-  const timer = setTimeout(() => ac.abort(), 30_000);
-  try {
-    const upstream = await fetch(url.toString(), {
-      method: "POST",
-      headers: { "content-type": "application/json", ...fwdHeaders },
-      body: serialized,
-      redirect: "error",
-      signal: ac.signal,
+  if (auth === "Bearer __demo__") {
+    const secret = process.env.ADAPTIVE_TURN_SECRET?.trim();
+    if (!secret || Buffer.byteLength(secret, "utf8") < 32) {
+      return NextResponse.json({ error: "Journey state unavailable" }, { status: 503 });
+    }
+    if (!isRecord(demoJourney)
+      || typeof demoJourney.id !== "string"
+      || typeof demoJourney.token !== "string") {
+      return NextResponse.json({ error: "invalid_journey_state" }, { status: 401 });
+    }
+    let claims;
+    try {
+      claims = readJourneyToken(secret, demoJourney.token, Date.now());
+      if (claims.journeyId !== demoJourney.id) throw new Error("invalid_journey_state");
+    } catch {
+      return NextResponse.json({ error: "invalid_journey_state" }, { status: 401 });
+    }
+    attemptLifecycle = createProviderAttemptLifecycle({
+      store: createUpstashAttemptStore({
+        url: process.env.UPSTASH_REDIS_REST_URL ?? "",
+        token: process.env.UPSTASH_REDIS_REST_TOKEN ?? "",
+      }),
+      newAttemptId: () => randomUUID(),
+      now: () => Date.now(),
+      journeyId: claims.journeyId,
+      release: claims.release,
+      route: claims.route,
+      turn: claims.turn,
     });
-    const text = await upstream.text();
+  }
+
+  let attempt: Awaited<ReturnType<ProviderAttemptLifecycle["start"]>> | undefined;
+  try {
+    attempt = await attemptLifecycle?.start();
+  } catch (error) {
+    if (error instanceof AttemptLifecycleError) {
+      return NextResponse.json({ error: error.code }, { status: 503 });
+    }
+    throw error;
+  }
+  const ac = new AbortController();
+  let callerCancelled = request.signal.aborted;
+  const abortFromCaller = () => {
+    callerCancelled = true;
+    ac.abort();
+  };
+  if (callerCancelled) ac.abort();
+  else request.signal.addEventListener("abort", abortFromCaller, { once: true });
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    ac.abort();
+  }, 30_000);
+  try {
+    let upstream: Response;
+    let text: string;
+    try {
+      upstream = await fetch(url.toString(), {
+        method: "POST",
+        headers: { "content-type": "application/json", ...fwdHeaders },
+        body: serialized,
+        redirect: "error",
+        signal: ac.signal,
+      });
+      text = await upstream.text();
+    } catch {
+      const failureCode = timedOut
+        ? "provider_timeout"
+        : callerCancelled ? "provider_cancelled" : "network_error";
+      if (attempt) await attemptLifecycle!.finish(attempt, { outcome: "failure", failureCode });
+      return NextResponse.json({ error: `Upstream fetch failed: ${failureCode}` }, { status: 502 });
+    }
+    if (attempt) {
+      if (!upstream.ok) {
+        await attemptLifecycle!.finish(attempt, {
+          outcome: "failure",
+          failureCode: `http_${upstream.status}`,
+          providerStatus: upstream.status,
+        });
+      } else {
+        let usage: ReturnType<typeof extractUsage>;
+        try {
+          usage = extractUsage(JSON.parse(text));
+        } catch {
+          usage = undefined;
+        }
+        await attemptLifecycle!.finish(attempt, {
+          outcome: "success",
+          ...(usage === undefined ? {} : { usage }),
+        });
+      }
+    }
     // Pass the provider's status + body straight through so the client can
     // surface auth/quota errors verbatim.
     return new NextResponse(text, {
       status: upstream.status,
       headers: { "content-type": upstream.headers.get("content-type") ?? "application/json" },
     });
-  } catch (e) {
-    const message = e instanceof Error ? e.message : String(e);
-    return NextResponse.json({ error: `Upstream fetch failed: ${message}` }, { status: 502 });
+  } catch (error) {
+    if (error instanceof AttemptLifecycleError) {
+      return NextResponse.json({ error: error.code }, { status: 503 });
+    }
+    if (attempt) {
+      try {
+        await attemptLifecycle!.finish(attempt, { outcome: "failure", failureCode: "network_error" });
+      } catch (lifecycleError) {
+        if (lifecycleError instanceof AttemptLifecycleError) {
+          return NextResponse.json({ error: lifecycleError.code }, { status: 503 });
+        }
+      }
+    }
+    return NextResponse.json({ error: "Upstream fetch failed: network_error" }, { status: 502 });
   } finally {
     clearTimeout(timer);
+    request.signal.removeEventListener("abort", abortFromCaller);
   }
 }

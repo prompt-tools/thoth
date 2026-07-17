@@ -1,0 +1,159 @@
+import { describe, expect, it, vi } from "vitest";
+import type { AttemptStartedRecord, AttemptTerminalRecord } from "./attempt-lifecycle";
+import { createUpstashAttemptStore } from "./upstash-attempt-store";
+
+const started: AttemptStartedRecord = {
+  version: 1,
+  attemptId: "attempt-1",
+  journeyId: "journey-1",
+  release: "release-a",
+  route: "fixed",
+  cohort: "fixed",
+  turn: 2,
+  startedAt: 1_700_000_000_000,
+  expiresAt: 1_702_592_000_000,
+};
+
+const terminal: AttemptTerminalRecord = {
+  outcome: "success",
+  validation: "ask",
+  endedAt: 1_700_000_000_120,
+  durationMs: 120,
+};
+
+describe("Upstash attempt persistence", () => {
+  it("preserves Started-only missing state and enforces terminal idempotency/conflict atomically", async () => {
+    type Stored = {
+      started: AttemptStartedRecord;
+      terminal?: AttemptTerminalRecord;
+      terminalIdentity?: string;
+      expiresAt: number;
+      conflictCount: number;
+      lastConflictIdentity?: string;
+    };
+    const hashes = new Map<string, Stored>();
+    const fetcher = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      const command = JSON.parse(String(init?.body)) as string[];
+      const key = command[3];
+      if (command[1].includes("PEXPIREAT")) {
+        if (hashes.has(key)) return Response.json({ result: "exists" });
+        hashes.set(key, {
+          started: JSON.parse(command[4]) as AttemptStartedRecord,
+          expiresAt: Number(command[5]),
+          conflictCount: 0,
+        });
+        return Response.json({ result: "created" });
+      }
+      const stored = hashes.get(key);
+      if (!stored) return Response.json({ result: "missing" });
+      const incoming = JSON.parse(command[4]) as AttemptTerminalRecord;
+      const identity = command[5];
+      if (!stored.terminalIdentity) {
+        stored.terminal = incoming;
+        stored.terminalIdentity = identity;
+        return Response.json({ result: "written" });
+      }
+      if (stored.terminalIdentity === identity) return Response.json({ result: "idempotent" });
+      stored.conflictCount += 1;
+      stored.lastConflictIdentity = identity;
+      return Response.json({ result: "conflict" });
+    });
+    const store = createUpstashAttemptStore({
+      url: "https://example.upstash.io",
+      token: "secret-token",
+      fetcher: fetcher as typeof fetch,
+    });
+
+    expect(await store.start(started)).toBe("created");
+    const interrupted = { ...started, attemptId: "attempt-interrupted" };
+    expect(await store.start(interrupted)).toBe("created");
+    expect(hashes.get("thoth:journey-attempt:v1:attempt-interrupted")).toEqual(expect.objectContaining({
+      started: interrupted,
+      expiresAt: interrupted.expiresAt,
+    }));
+    expect(hashes.get("thoth:journey-attempt:v1:attempt-interrupted")?.terminal).toBeUndefined();
+
+    expect(await store.finish("attempt-1", terminal)).toBe("written");
+    expect(await store.finish("attempt-1", {
+      ...terminal,
+      endedAt: terminal.endedAt + 10,
+      durationMs: terminal.durationMs + 10,
+    })).toBe("idempotent");
+    const conflicting: AttemptTerminalRecord = {
+      outcome: "failure",
+      failureCode: "http_503",
+      providerStatus: 503,
+      endedAt: terminal.endedAt + 20,
+      durationMs: terminal.durationMs + 20,
+    };
+    expect(await store.finish("attempt-1", conflicting)).toBe("conflict");
+    expect(await store.finish("missing-attempt", terminal)).toBe("missing");
+    expect(hashes.get("thoth:journey-attempt:v1:attempt-1")).toEqual(expect.objectContaining({
+      terminal,
+      conflictCount: 1,
+      lastConflictIdentity: JSON.stringify({
+        outcome: "failure",
+        failureCode: "http_503",
+        providerStatus: 503,
+      }),
+    }));
+  });
+
+  it("atomically creates a content-free started hash with the absolute 30-day expiry", async () => {
+    const fetcher = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      const command = JSON.parse(String(init?.body)) as string[];
+      expect(command.slice(0, 4)).toEqual([
+        "EVAL",
+        expect.stringContaining("PEXPIREAT"),
+        "1",
+        "thoth:journey-attempt:v1:attempt-1",
+      ]);
+      expect(JSON.parse(command[4])).toEqual(started);
+      expect(command[5]).toBe(String(started.expiresAt));
+      expect(command.join(" ")).not.toContain("subjectBrief");
+      return Response.json({ result: "created" });
+    });
+    const store = createUpstashAttemptStore({
+      url: "https://example.upstash.io",
+      token: "secret-token",
+      fetcher: fetcher as typeof fetch,
+    });
+
+    await expect(store.start(started)).resolves.toBe("created");
+    expect(fetcher).toHaveBeenCalledWith("https://example.upstash.io", expect.objectContaining({
+      method: "POST",
+      headers: expect.objectContaining({ authorization: "Bearer secret-token" }),
+    }));
+  });
+
+  it.each(["written", "idempotent", "conflict", "missing"] as const)(
+    "maps the atomic terminal result %s without replacing a prior terminal",
+    async (result) => {
+      const fetcher = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+        const command = JSON.parse(String(init?.body)) as string[];
+        expect(command.slice(0, 4)).toEqual([
+          "EVAL",
+          expect.stringContaining("terminalIdentity"),
+          "1",
+          "thoth:journey-attempt:v1:attempt-1",
+        ]);
+        expect(JSON.parse(command[4])).toEqual(terminal);
+        expect(JSON.parse(command[5])).toEqual({ outcome: "success", validation: "ask" });
+        expect(command[1]).toContain("HINCRBY");
+        return Response.json({ result });
+      });
+      const store = createUpstashAttemptStore({
+        url: "https://example.upstash.io",
+        token: "secret-token",
+        fetcher: fetcher as typeof fetch,
+      });
+
+      await expect(store.finish("attempt-1", terminal)).resolves.toBe(result);
+    },
+  );
+
+  it("fails closed when durable storage is not configured", async () => {
+    const store = createUpstashAttemptStore({ url: "", token: "" });
+    await expect(store.start(started)).rejects.toThrow("attempt_store_unavailable");
+  });
+});

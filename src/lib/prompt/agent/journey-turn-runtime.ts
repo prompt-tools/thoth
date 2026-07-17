@@ -16,6 +16,11 @@ import {
   type AdaptiveTurnRuntimeDeps,
 } from "./adaptive-turn-runtime";
 import { issueAcceptedAskToken, verifySubmittedTurnState } from "./adaptive-turn-state";
+import {
+  AttemptLifecycleError,
+  createProviderAttemptLifecycle,
+  type AttemptStore,
+} from "./attempt-lifecycle";
 
 export interface JourneyTurnRuntimeDeps {
   secret?: string;
@@ -24,6 +29,8 @@ export interface JourneyTurnRuntimeDeps {
   demoKey?: string;
   now: () => number;
   newJourneyId: () => string;
+  newAttemptId: () => string;
+  attemptStore: AttemptStore;
   fixedTransport: (request: ProxyRequest) => Promise<unknown>;
   adaptiveExchange: AdaptiveTurnRuntimeDeps["exchange"];
 }
@@ -154,30 +161,61 @@ export async function handleJourneyTurnRequest(
     diagnostics: unknown;
   };
   if (route === "adaptive") {
-    const adaptiveResponse = await handleAdaptiveTurnRequest(new Request(request.url, {
-      method: "POST",
-      headers: { authorization: `Bearer ${deps.demoKey}`, "content-type": "application/json" },
-      body: JSON.stringify({
-        subjectBrief: input.subjectBrief,
-        history: input.history,
-        precision: input.precision,
-        ...(adaptiveTurnToken ? { turnToken: adaptiveTurnToken } : {}),
-      }),
-    }), {
-      enabled: true,
-      turnSecret: secret,
-      now: () => now,
-      exchange: deps.adaptiveExchange,
-    });
+    let adaptiveResponse: Response;
+    try {
+      adaptiveResponse = await handleAdaptiveTurnRequest(new Request(request.url, {
+        method: "POST",
+        headers: { authorization: `Bearer ${deps.demoKey}`, "content-type": "application/json" },
+        signal: request.signal,
+        body: JSON.stringify({
+          subjectBrief: input.subjectBrief,
+          history: input.history,
+          precision: input.precision,
+          ...(adaptiveTurnToken ? { turnToken: adaptiveTurnToken } : {}),
+        }),
+      }), {
+        enabled: true,
+        turnSecret: secret,
+        now: () => now,
+        exchange: deps.adaptiveExchange,
+        attemptLifecycle: createProviderAttemptLifecycle({
+          store: deps.attemptStore,
+          newAttemptId: deps.newAttemptId,
+          now: deps.now,
+          journeyId,
+          release,
+          route,
+          turn: input.history.length,
+        }),
+      });
+    } catch (error) {
+      if (error instanceof AttemptLifecycleError) return json({ error: error.code }, 503);
+      throw error;
+    }
     if (!adaptiveResponse.ok) return adaptiveResponse;
     result = await adaptiveResponse.json() as typeof result;
   } else {
-    result = await runAgentTurn(getProvider("deepseek"), deps.demoKey, {
-      manifest,
-      history: input.history,
-      userDescription: input.subjectBrief,
-      precision: input.precision,
-    }, deps.fixedTransport);
+    try {
+      result = await runAgentTurn(getProvider("deepseek"), deps.demoKey, {
+        manifest,
+        history: input.history,
+        userDescription: input.subjectBrief,
+        precision: input.precision,
+      }, deps.fixedTransport, {
+        attemptLifecycle: createProviderAttemptLifecycle({
+          store: deps.attemptStore,
+          newAttemptId: deps.newAttemptId,
+          now: deps.now,
+          journeyId,
+          release,
+          route,
+          turn: input.history.length,
+        }),
+      });
+    } catch (error) {
+      if (error instanceof AttemptLifecycleError) return json({ error: error.code }, 503);
+      throw error;
+    }
   }
   const token = issueJourneyToken({
     secret,

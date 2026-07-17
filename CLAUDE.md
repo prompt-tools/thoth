@@ -62,6 +62,7 @@ Server-only env vars (never `NEXT_PUBLIC_`, never in the browser bundle):
 | `JOURNEY_RELEASE` | Stable release identifier used in signed Journey claims and Canary assignment; falls back to `VERCEL_GIT_COMMIT_SHA`, then `local` |
 | `ADAPTIVE_CANARY_EXPOSURE=0|10|50|100` | Percentage of new Built-in Journeys assigned to Adaptive; defaults to `0` |
 | `ADAPTIVE_ROUTING_ENABLED=1` | Allow non-zero Adaptive exposure and the legacy BYOK Adaptive boundary; absent forces new Built-in Journeys to fixed |
+| `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` | Durable server-only store for content-free Journey attempt lifecycles; Built-in provider calls fail closed when unavailable |
 | `LANGFUSE_BASE_URL` / `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` | Telemetry sink; absent → telemetry is a no-op |
 
 Public build-time flags:

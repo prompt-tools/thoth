@@ -66,6 +66,7 @@ async function runSecondaryAutofill(args: {
   precision: Precision;
   providerId: string;
   apiKey: string;
+  journey?: { id: string; token: string };
 }): Promise<{ filledHistory: AgentHistoryItem[]; filledIds: Set<string> }> {
   let filledHistory = args.history;
   const filledIds = new Set<string>();
@@ -93,6 +94,7 @@ async function runSecondaryAutofill(args: {
         history: args.history,
         fillSet,
         userDescription: args.description,
+        ...(args.journey === undefined ? {} : { journey: args.journey }),
       },
     );
     for (const r of fillResults) {
@@ -400,6 +402,9 @@ export function useAgentGuideController() {
                 precision: precisionRef.current,
                 providerId: providerRef.current,
                 apiKey: keyRef.current,
+                ...(BUILTIN_DEMO && journeyIdRef.current && turnTokenRef.current
+                  ? { journey: { id: journeyIdRef.current, token: turnTokenRef.current } }
+                  : {}),
               });
           if (sessionRef.current !== mySession) return;
 
@@ -658,6 +663,9 @@ export function useAgentGuideController() {
       precision: precisionRef.current,
       providerId: providerRef.current,
       apiKey: keyRef.current,
+      ...(BUILTIN_DEMO && journeyIdRef.current && turnTokenRef.current
+        ? { journey: { id: journeyIdRef.current, token: turnTokenRef.current } }
+        : {}),
     });
     if (sessionRef.current !== mySession) return;
 
@@ -680,6 +688,9 @@ export function useAgentGuideController() {
       const result = await polishPrompt(getProvider(providerRef.current), keyRef.current, {
         zhPrompt: rendered.zhPrompt,
         enPrompt: rendered.enPrompt,
+        ...(BUILTIN_DEMO && journeyIdRef.current && turnTokenRef.current
+          ? { journey: { id: journeyIdRef.current, token: turnTokenRef.current } }
+          : {}),
       });
       setPolished(result);
     } catch (e) {
