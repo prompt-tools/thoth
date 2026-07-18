@@ -1,13 +1,18 @@
 import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
-import { ATTEMPT_RETENTION_MS } from "@/lib/prompt/agent/attempt-lifecycle";
+import {
+  ATTEMPT_AGGREGATE_RETENTION_MS,
+  ATTEMPT_RETENTION_MS,
+} from "@/lib/prompt/agent/attempt-lifecycle";
 import { readJourneyToken } from "@/lib/prompt/agent/journey-state";
+import { UPSTASH_FETCH_TIMEOUT_MS } from "@/lib/prompt/agent/upstash-attempt-store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const MAX_BODY_BYTES = 16 * 1024;
 const KEY_PREFIX = "thoth:journey-outcome:v1:";
+const AGGREGATE_KEY_PREFIX = "thoth:journey-outcome-aggregate:v1:";
 const EVENT_STATES = {
   answer_submitted: "ask",
   turn_skipped: "ask",
@@ -22,6 +27,10 @@ if redis.call('EXISTS', KEYS[1]) == 1 then
 end
 redis.call('SET', KEYS[1], ARGV[1])
 redis.call('PEXPIREAT', KEYS[1], ARGV[2])
+local count = redis.call('INCR', KEYS[2])
+if count == 1 then
+  redis.call('PEXPIREAT', KEYS[2], ARGV[3])
+end
 return 'created'
 `.trim();
 
@@ -33,6 +42,21 @@ function eventType(value: unknown): OutcomeEventType | undefined {
   return typeof value === "string" && Object.hasOwn(EVENT_STATES, value)
     ? value as OutcomeEventType
     : undefined;
+}
+
+function rejectOnAbort(signal: AbortSignal): Promise<never> {
+  return new Promise((_, reject) => {
+    const rejectWithReason = () => reject(signal.reason ?? new Error("upstash_request_timeout"));
+    if (signal.aborted) {
+      rejectWithReason();
+      return;
+    }
+    signal.addEventListener("abort", rejectWithReason, { once: true });
+  });
+}
+
+function bounded<T>(operation: Promise<T>, signal: AbortSignal): Promise<T> {
+  return Promise.race([operation, rejectOnAbort(signal)]);
 }
 
 export async function POST(request: Request) {
@@ -98,9 +122,13 @@ export async function POST(request: Request) {
   const identity = createHash("sha256")
     .update(`${claims.journeyId}\0${claims.turn}\0${type}`, "utf8")
     .digest("base64url");
+  const day = new Date(now).toISOString().slice(0, 10);
+  const releaseHash = createHash("sha256").update(claims.release, "utf8").digest("base64url");
+  const aggregateKey = `${AGGREGATE_KEY_PREFIX}${day}:${releaseHash}:${claims.route}:${type}`;
 
   try {
-    const response = await fetch(url, {
+    const signal = AbortSignal.timeout(UPSTASH_FETCH_TIMEOUT_MS);
+    const response = await bounded(fetch(url, {
       method: "POST",
       headers: {
         authorization: `Bearer ${token}`,
@@ -109,15 +137,21 @@ export async function POST(request: Request) {
       body: JSON.stringify([
         "EVAL",
         CREATE_SCRIPT,
-        "1",
+        "2",
         `${KEY_PREFIX}${identity}`,
+        aggregateKey,
         JSON.stringify(record),
         String(expiresAt),
+        String(now + ATTEMPT_AGGREGATE_RETENTION_MS),
       ]),
       redirect: "error",
       cache: "no-store",
-    });
-    const result = await response.json() as { result?: unknown; error?: unknown };
+      signal,
+    }), signal);
+    const result = await bounded(response.json() as Promise<{
+      result?: unknown;
+      error?: unknown;
+    }>, signal);
     if (!response.ok || result.error !== undefined
       || (result.result !== "created" && result.result !== "exists")) {
       return json({ ok: false, error: "telemetry_unavailable" }, 503);

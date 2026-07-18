@@ -58,7 +58,7 @@ describe("POST /api/journey-turn", () => {
     const fetchSpy = vi.fn().mockImplementation(async (url: string, init?: RequestInit) => {
       if (url === "https://example.upstash.io") {
         const command = JSON.parse(String(init?.body)) as string[];
-        return Response.json({ result: command[1].includes("PEXPIREAT") ? "created" : "written" });
+        return Response.json({ result: command[2] === "1" ? "created" : "written" });
       }
       return new Response("{}");
     });
@@ -85,6 +85,57 @@ describe("POST /api/journey-turn", () => {
     ]);
   });
 
+  it.each(["url", "token", "incomplete"] as const)("keeps content-free Journey routing on while disabling raw Redis with a shared or %s config", async (field) => {
+    vi.stubEnv("ADAPTIVE_TURN_SECRET", "a-strong-test-secret-with-at-least-32-bytes");
+    vi.stubEnv("JOURNEY_RELEASE", "release-a");
+    vi.stubEnv("ADAPTIVE_CANARY_EXPOSURE", "0");
+    vi.stubEnv("DEMO_DEEPSEEK_KEY", "server-key");
+    vi.stubEnv("UPSTASH_REDIS_REST_URL", "https://example.upstash.io");
+    vi.stubEnv("UPSTASH_REDIS_REST_TOKEN", "redis-token");
+    vi.stubEnv("RAW_CONTENT_SAMPLING_ENABLED", "1");
+    vi.stubEnv("RAW_CONTENT_RETENTION_VERIFIED", "1");
+    vi.stubEnv(
+      "RAW_CONTENT_REDIS_REST_URL",
+      field === "url" ? "https://example.upstash.io/" : "https://raw.example.upstash.io",
+    );
+    vi.stubEnv(
+      "RAW_CONTENT_REDIS_REST_TOKEN",
+      field === "token" ? "redis-token" : field === "incomplete" ? "" : "raw-token",
+    );
+    const fetchSpy = vi.fn().mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === "https://example.upstash.io") {
+        const command = JSON.parse(String(init?.body)) as string[];
+        return Response.json({ result: command[2] === "1" ? "created" : "written" });
+      }
+      return new Response("{}");
+    });
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const response = await POST(new Request("http://localhost/api/journey-turn", {
+      method: "POST",
+      headers: { authorization: "Bearer __demo__", "content-type": "application/json" },
+      body: JSON.stringify({
+        subjectBrief: "原创游侠角色",
+        history: [],
+        precision: "simple",
+        journeyId: "00000000-0000-4000-8000-00000000000d",
+        rawContentConsent: true,
+      }),
+    }));
+    const result = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(result).toMatchObject({
+      journey: { route: "fixed" },
+      rawContentEligible: false,
+    });
+    expect(fetchSpy.mock.calls.map(([url]) => url)).toEqual([
+      "https://example.upstash.io",
+      "https://api.deepseek.com/chat/completions",
+      "https://example.upstash.io",
+    ]);
+  });
+
   it("continues a fixed Journey through the production route with its latest token", async () => {
     vi.stubEnv("ADAPTIVE_TURN_SECRET", "a-strong-test-secret-with-at-least-32-bytes");
     vi.stubEnv("JOURNEY_RELEASE", "release-a");
@@ -95,7 +146,7 @@ describe("POST /api/journey-turn", () => {
     const fetchSpy = vi.fn().mockImplementation(async (url: string, init?: RequestInit) => {
       if (url === "https://example.upstash.io") {
         const command = JSON.parse(String(init?.body)) as string[];
-        return Response.json({ result: command[1].includes("PEXPIREAT") ? "created" : "written" });
+        return Response.json({ result: command[2] === "1" ? "created" : "written" });
       }
       return new Response("{}");
     });
@@ -143,11 +194,11 @@ describe("POST /api/journey-turn", () => {
     const fetchSpy = vi.fn().mockImplementation(async (url: string, init?: RequestInit) => {
       if (url === "https://example.upstash.io") {
         const command = JSON.parse(String(init?.body)) as string[];
-        if (command[1].includes("PEXPIREAT")) {
+        if (command[2] === "1") {
           startedIds.push((JSON.parse(command[4]) as { attemptId: string }).attemptId);
           return Response.json({ result: "created" });
         }
-        terminals.push(JSON.parse(command[4]) as Record<string, unknown>);
+        terminals.push(JSON.parse(command[5]) as Record<string, unknown>);
         return Response.json({ result: "written" });
       }
       return new Response("unavailable", { status: 503 });
@@ -183,8 +234,8 @@ describe("POST /api/journey-turn", () => {
     const fetchSpy = vi.fn().mockImplementation(async (url: string, init?: RequestInit) => {
       if (url === "https://example.upstash.io") {
         const command = JSON.parse(String(init?.body)) as string[];
-        if (command[1].includes("PEXPIREAT")) return Response.json({ result: "created" });
-        terminals.push(JSON.parse(command[4]) as Record<string, unknown>);
+        if (command[2] === "1") return Response.json({ result: "created" });
+        terminals.push(JSON.parse(command[5]) as Record<string, unknown>);
         return Response.json({ result: "written" });
       }
       const providerSignal = init?.signal as AbortSignal;
@@ -234,8 +285,8 @@ describe("POST /api/journey-turn", () => {
     const fetchSpy = vi.fn().mockImplementation(async (url: string, init?: RequestInit) => {
       if (url === "https://example.upstash.io") {
         const command = JSON.parse(String(init?.body)) as string[];
-        if (command[1].includes("PEXPIREAT")) return Response.json({ result: "created" });
-        terminals.push(JSON.parse(command[4]) as Record<string, unknown>);
+        if (command[2] === "1") return Response.json({ result: "created" });
+        terminals.push(JSON.parse(command[5]) as Record<string, unknown>);
         return Response.json({ result: "written" });
       }
       providerCalls += 1;
@@ -289,12 +340,12 @@ describe("POST /api/journey-turn", () => {
     const fetchSpy = vi.fn().mockImplementation(async (url: string, init?: RequestInit) => {
       if (url === "https://example.upstash.io") {
         const command = JSON.parse(String(init?.body)) as string[];
-        if (command[1].includes("PEXPIREAT")) {
+        if (command[2] === "1") {
           events.push("started");
           return Response.json({ result: "created" });
         }
         events.push("terminal");
-        terminals.push(JSON.parse(command[4]) as Record<string, unknown>);
+        terminals.push(JSON.parse(command[5]) as Record<string, unknown>);
         return Response.json({ result: "written" });
       }
       events.push("provider");
@@ -345,8 +396,8 @@ describe("POST /api/journey-turn", () => {
     const fetchSpy = vi.fn().mockImplementation(async (url: string, init?: RequestInit) => {
       if (url === "https://example.upstash.io") {
         const command = JSON.parse(String(init?.body)) as string[];
-        if (command[1].includes("PEXPIREAT")) return Response.json({ result: "created" });
-        terminals.push(JSON.parse(command[4]) as Record<string, unknown>);
+        if (command[2] === "1") return Response.json({ result: "created" });
+        terminals.push(JSON.parse(command[5]) as Record<string, unknown>);
         return Response.json({ result: "written" });
       }
       providerSignal = init?.signal as AbortSignal;
@@ -388,8 +439,8 @@ describe("POST /api/journey-turn", () => {
     const fetchSpy = vi.fn().mockImplementation(async (url: string, init?: RequestInit) => {
       if (url === "https://example.upstash.io") {
         const command = JSON.parse(String(init?.body)) as string[];
-        if (command[1].includes("PEXPIREAT")) return Response.json({ result: "created" });
-        terminals.push(JSON.parse(command[4]) as Record<string, unknown>);
+        if (command[2] === "1") return Response.json({ result: "created" });
+        terminals.push(JSON.parse(command[5]) as Record<string, unknown>);
         return Response.json({ result: "written" });
       }
       return new Response(JSON.stringify({

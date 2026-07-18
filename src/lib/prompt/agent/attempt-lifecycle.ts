@@ -1,4 +1,7 @@
-export const ATTEMPT_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+export const ATTEMPT_RETENTION_MS = 30 * DAY_MS;
+export const ATTEMPT_AGGREGATE_RETENTION_MS = 90 * DAY_MS;
 
 export type AttemptRoute = "fixed" | "adaptive";
 

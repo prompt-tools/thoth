@@ -152,11 +152,17 @@ function DescribeStep({
   precision,
   onPrecisionChange,
   requireDescription,
+  showRawContentConsent,
+  rawContentConsent,
+  onRawContentConsentChange,
 }: {
   onStart: (text: string) => void;
   precision: Precision;
   onPrecisionChange: (p: Precision) => void;
   requireDescription: boolean;
+  showRawContentConsent: boolean;
+  rawContentConsent: boolean;
+  onRawContentConsentChange: (consent: boolean) => void;
 }) {
   const [text, setText] = useState("");
   return (
@@ -179,6 +185,48 @@ function DescribeStep({
         placeholder="例如：银发游戏角色立绘，清冷神秘，夜色城堡背景"
         className="mt-3 w-full resize-y rounded-md border border-slate-300 px-3 py-2 text-sm leading-6 focus:border-slate-900 focus:outline-none"
       />
+      {showRawContentConsent ? (
+        <div className="mt-4">
+          <label className="flex items-start gap-3 rounded-md border border-slate-200 bg-slate-50 p-3 text-xs leading-5 text-slate-600">
+            <input
+              type="checkbox"
+              checked={rawContentConsent}
+              onChange={(event) => onRawContentConsentChange(event.target.checked)}
+              className="mt-1 h-4 w-4 shrink-0 rounded border-slate-300 accent-slate-900"
+            />
+            <span>
+              同意：本次人物描述、回答历史（含自由文本）和服务端重算的最终中文/英文提示词，
+              以及模型消息与工具/函数诊断内容，可能被稳定服务端按 20% 概率抽样；原始内容最多保留 14 天。
+              未勾选时只记录不含内容的运行状态和错误指标。
+            </span>
+          </label>
+          <details className="mt-2 rounded-md border border-slate-200 bg-white text-xs leading-5 text-slate-600">
+            <summary className="cursor-pointer select-none px-3 py-2 font-medium text-slate-700">
+              完整采样字段与保留说明
+            </summary>
+            <div className="border-t border-slate-200 px-3 py-2">
+              <ul className="list-disc space-y-1 pl-5">
+                <li>
+                  仅已同意 Journey 中稳定服务端抽样的 20% 会写入，重试沿用同一样本。允许的用户内容是
+                  Subject brief、每项回答的 questionId/所选选项 ID/自由文本，以及服务端按签名回答重算的最终中文和英文提示词。
+                </li>
+                <li>
+                  允许的 provider 诊断是 OpenAI 第一 choice 的 finish_reason、message text、
+                  tool_calls[].function.name 与原样 arguments；或 Anthropic 的 stop_reason、text blocks、tool_use name 与 input。
+                </li>
+                <li>
+                  raw 记录还含内部关联/过期元数据：version、kind（provider/completion）、journeyId、release、route、turn、provider 记录的 delivery、recordedAt、expiresAt；
+                  这些不是 provider response ID。明确丢弃 provider response ID（OpenAI 的 id/tool_calls[].id、Anthropic 的 tool_use.id）、model、usage、system_fingerprint、headers 和其他 provider 元数据。
+                </li>
+                <li>
+                  每个 raw key 使用不晚于 recordedAt + 14 天的绝对 PXAT；这只约束 key TTL，不证明 ACL、备份、日志或 provider/all-media retention。
+                  生产 raw 保持 blocked/off，部署负责人须另行核验这些门槛后才可启用；浏览器 key、仓库/构建产物和 replay artifact 不写入 raw。
+                </li>
+              </ul>
+            </div>
+          </details>
+        </div>
+      ) : null}
       <div className="mt-4 flex flex-wrap items-center gap-3">
         <Button
           type="button"
@@ -338,6 +386,8 @@ function AgentDemo() {
     reconfigure,
     precision,
     setPrecision,
+    rawContentConsent,
+    setRawContentConsent,
     autoFilledSummary,
     builtinDemo,
     adaptiveRouting,
@@ -437,6 +487,9 @@ function AgentDemo() {
             precision={precision}
             onPrecisionChange={setPrecision}
             requireDescription={adaptiveRouting}
+            showRawContentConsent={builtinDemo}
+            rawContentConsent={rawContentConsent}
+            onRawContentConsentChange={setRawContentConsent}
           />
         ) : null}
 

@@ -2,10 +2,12 @@ import { buildCatalogManifest } from "./catalog-manifest";
 import type { AgentHistoryItem } from "./decision";
 import type { Precision } from "./gradient";
 import {
+  assignRawContentSample,
   assignJourneyRoute,
   issueJourneyToken,
   matchesJourneySnapshot,
   parseJourneyExposure,
+  RAW_CONTENT_CONSENT_VERSION,
   readJourneyToken,
   type JourneyClaims,
 } from "./journey-state";
@@ -21,6 +23,12 @@ import {
   createProviderAttemptLifecycle,
   type AttemptStore,
 } from "./attempt-lifecycle";
+import {
+  RAW_CONTENT_RETENTION_MS,
+  extractProviderDiagnosticContent,
+  type ProviderDiagnosticContent,
+  type RawContentStore,
+} from "./raw-content-store";
 
 export interface JourneyTurnRuntimeDeps {
   secret?: string;
@@ -33,6 +41,9 @@ export interface JourneyTurnRuntimeDeps {
   attemptStore: AttemptStore;
   fixedTransport: (request: ProxyRequest) => Promise<unknown>;
   adaptiveExchange: AdaptiveTurnRuntimeDeps["exchange"];
+  rawContentStore?: RawContentStore;
+  rawContentSamplingEnabled?: boolean;
+  scheduleAfterResponse?: (task: () => Promise<void>) => void;
 }
 
 interface JourneyInput {
@@ -41,6 +52,8 @@ interface JourneyInput {
   precision: Precision;
   journeyId?: string;
   journeyToken?: string;
+  rawContentConsent?: boolean;
+  complete?: boolean;
 }
 
 function json(data: unknown, status = 200): Response {
@@ -51,7 +64,10 @@ function isHistory(value: unknown): value is AgentHistoryItem[] {
   return Array.isArray(value) && value.every((entry) => {
     if (!entry || typeof entry !== "object" || Array.isArray(entry)) return false;
     const item = entry as Record<string, unknown>;
-    return typeof item.questionId === "string"
+    return Object.keys(item).every((key) => (
+      key === "questionId" || key === "selectedOptionIds" || key === "freeText"
+    ))
+      && typeof item.questionId === "string"
       && Array.isArray(item.selectedOptionIds)
       && item.selectedOptionIds.every((id) => typeof id === "string")
       && (item.freeText === undefined || typeof item.freeText === "string");
@@ -65,10 +81,43 @@ function parseInput(value: unknown): JourneyInput {
     || !isHistory(raw.history)
     || (raw.precision !== "simple" && raw.precision !== "standard" && raw.precision !== "detailed")
     || (raw.journeyId !== undefined && typeof raw.journeyId !== "string")
-    || (raw.journeyToken !== undefined && typeof raw.journeyToken !== "string")) {
+    || (raw.journeyToken !== undefined && typeof raw.journeyToken !== "string")
+    || (raw.rawContentConsent !== undefined && typeof raw.rawContentConsent !== "boolean")
+    || (raw.complete !== undefined && typeof raw.complete !== "boolean")) {
     throw new Error("invalid_journey_state");
   }
   return raw as unknown as JourneyInput;
+}
+
+function isClientJourneyId(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
+function isCanonicalCompletionExtension(
+  claims: JourneyClaims,
+  input: JourneyInput,
+  manifest: ReturnType<typeof buildCatalogManifest>,
+): boolean {
+  if (input.history.length < claims.turn) return false;
+  const prefix = input.history.slice(0, claims.turn);
+  if (!matchesJourneySnapshot(claims, input.subjectBrief, prefix, input.precision)) return false;
+  const seen = new Set(prefix.map((item) => item.questionId));
+  for (const item of input.history.slice(claims.turn)) {
+    const dimension = manifest.find((candidate) => candidate.questionId === item.questionId);
+    const uniqueIds = new Set(item.selectedOptionIds);
+    const hasFreeText = item.freeText !== undefined;
+    if (!dimension
+      || seen.has(item.questionId)
+      || uniqueIds.size !== item.selectedOptionIds.length
+      || item.selectedOptionIds.some((id) => !dimension.options.some((option) => option.id === id))
+      || (hasFreeText && (!item.freeText?.trim() || item.selectedOptionIds.length > 0))
+      || (dimension.mode === "single" && item.selectedOptionIds.length > 1)
+      || (dimension.maxSelections !== undefined && item.selectedOptionIds.length > dimension.maxSelections)) {
+      return false;
+    }
+    seen.add(item.questionId);
+  }
+  return true;
 }
 
 function stateForDecision(
@@ -115,19 +164,60 @@ export async function handleJourneyTurnRequest(
   const now = deps.now();
   let journeyId: string;
   let route: "fixed" | "adaptive";
+  let consent: JourneyClaims["consent"] = null;
+  let rawContentSampled = false;
   let adaptiveTurnToken: string | undefined;
-  if (input.journeyId === undefined && input.journeyToken === undefined) {
-    if (input.history.length !== 0) return json({ error: "invalid_journey_state" }, 400);
-    journeyId = deps.newJourneyId();
+  const manifest = buildCatalogManifest();
+  if (input.journeyToken === undefined) {
+    if (input.history.length !== 0 || input.complete === true) {
+      return json({ error: "invalid_journey_state" }, 400);
+    }
+    if (input.journeyId !== undefined && !isClientJourneyId(input.journeyId)) {
+      return json({ error: "invalid_journey_state" }, 400);
+    }
+    journeyId = input.journeyId ?? deps.newJourneyId();
     route = assignJourneyRoute(release, journeyId, exposure);
+    consent = input.rawContentConsent === true
+      ? { version: RAW_CONTENT_CONSENT_VERSION, acceptedAt: now }
+      : null;
+    rawContentSampled = consent !== null && assignRawContentSample(secret, release, journeyId);
   } else {
-    if (!input.journeyId || !input.journeyToken) return json({ error: "invalid_journey_state" }, 400);
+    if (!input.journeyId) return json({ error: "invalid_journey_state" }, 400);
     try {
       const claims = readJourneyToken(secret, input.journeyToken, now);
-      if (claims.journeyId !== input.journeyId
-        || claims.release !== release
-        || claims.state.kind !== "ask"
-        || input.history.length !== claims.turn + 1) {
+      if (claims.journeyId !== input.journeyId || claims.release !== release) {
+        throw new Error("invalid_journey_state");
+      }
+      if (input.complete === true) {
+        if ((claims.state.kind === "ask" && claims.turn === 0 && input.history.length === 0)
+          || !isCanonicalCompletionExtension(claims, input, manifest)) {
+          throw new Error("invalid_journey_state");
+        }
+        const token = claims.state.kind === "done" && input.history.length === claims.turn
+          ? input.journeyToken
+          : issueJourneyToken({
+              secret,
+              journeyId: claims.journeyId,
+              release,
+              route: claims.route,
+              subjectBrief: input.subjectBrief,
+              history: input.history,
+              precision: input.precision,
+              state: { kind: "done" },
+              consent: claims.consent,
+              rawContentSampled: claims.rawContentSampled,
+              now: claims.issuedAt,
+            });
+        return json({
+          journey: { id: claims.journeyId, route: claims.route, token },
+          decision: { nextQuestionId: null, visibleOptionIds: [], done: true },
+          diagnostics: { source: "remainingEmpty", fallbackUsed: false },
+          rawContentEligible: deps.rawContentSamplingEnabled === true
+            && claims.consent !== null
+            && claims.rawContentSampled,
+        });
+      }
+      if (claims.state.kind !== "ask" || input.history.length !== claims.turn + 1) {
         throw new Error("invalid_journey_state");
       }
       const prefix = input.history.slice(0, -1);
@@ -151,17 +241,34 @@ export async function handleJourneyTurnRequest(
       }, now);
       journeyId = claims.journeyId;
       route = claims.route;
+      consent = claims.consent;
+      rawContentSampled = claims.rawContentSampled;
     } catch {
       return json({ error: "invalid_journey_state" }, 400);
     }
   }
-  const manifest = buildCatalogManifest();
+  const capturedRawProviderContent: ProviderDiagnosticContent[] = [];
+  const captureRawProviderContent = (providerContent: unknown): void => {
+    if (deps.rawContentSamplingEnabled === true
+      && deps.rawContentStore
+      && deps.scheduleAfterResponse
+      && consent !== null
+      && rawContentSampled) {
+      try {
+        const diagnosticContent = extractProviderDiagnosticContent(providerContent);
+        if (diagnosticContent) capturedRawProviderContent.push(diagnosticContent);
+      } catch {
+        // Diagnostic extraction must never change the Journey result.
+      }
+    }
+  };
   let result: {
     decision: { nextQuestionId: string | null; visibleOptionIds: string[]; done: boolean };
     diagnostics: unknown;
   };
   if (route === "adaptive") {
     let adaptiveResponse: Response;
+    let rawBody: Uint8Array | undefined;
     try {
       adaptiveResponse = await handleAdaptiveTurnRequest(new Request(request.url, {
         method: "POST",
@@ -178,6 +285,9 @@ export async function handleJourneyTurnRequest(
         turnSecret: secret,
         now: () => now,
         exchange: deps.adaptiveExchange,
+        onEvidence: (evidence) => {
+          if (evidence.rawBody) rawBody = evidence.rawBody;
+        },
         attemptLifecycle: createProviderAttemptLifecycle({
           store: deps.attemptStore,
           newAttemptId: deps.newAttemptId,
@@ -192,6 +302,12 @@ export async function handleJourneyTurnRequest(
       if (error instanceof AttemptLifecycleError) return json({ error: error.code }, 503);
       throw error;
     }
+    if (rawBody) {
+      captureRawProviderContent({
+        encoding: "base64",
+        data: Buffer.from(rawBody).toString("base64"),
+      });
+    }
     if (!adaptiveResponse.ok) return adaptiveResponse;
     result = await adaptiveResponse.json() as typeof result;
   } else {
@@ -201,7 +317,11 @@ export async function handleJourneyTurnRequest(
         history: input.history,
         userDescription: input.subjectBrief,
         precision: input.precision,
-      }, deps.fixedTransport, {
+      }, async (providerRequest) => {
+        const providerContent = await deps.fixedTransport(providerRequest);
+        captureRawProviderContent(providerContent);
+        return providerContent;
+      }, {
         attemptLifecycle: createProviderAttemptLifecycle({
           store: deps.attemptStore,
           newAttemptId: deps.newAttemptId,
@@ -226,11 +346,60 @@ export async function handleJourneyTurnRequest(
     history: input.history,
     precision: input.precision,
     state: stateForDecision(result.decision, manifest),
+    consent,
+    rawContentSampled,
     now,
   });
+  const rawContentStore = deps.rawContentStore;
+  const scheduleAfterResponse = deps.scheduleAfterResponse;
+  if (capturedRawProviderContent.length > 0 && rawContentStore && scheduleAfterResponse) {
+    try {
+      // Storage happens only after the same server-derived consent and sample
+      // have been bound into a valid signed Journey token.
+      const rawClaims = readJourneyToken(secret, token, now);
+      if (rawClaims.consent !== null && rawClaims.rawContentSampled) {
+        const records = capturedRawProviderContent.map((providerContent, delivery) => ({
+          version: 1,
+          kind: "provider",
+          journeyId: rawClaims.journeyId,
+          release: rawClaims.release,
+          route: rawClaims.route,
+          turn: rawClaims.turn,
+          recordedAt: now,
+          expiresAt: now + RAW_CONTENT_RETENTION_MS,
+          subjectBrief: input.subjectBrief,
+          history: input.history.map((item) => ({
+            ...item,
+            selectedOptionIds: [...item.selectedOptionIds],
+          })),
+          delivery,
+          providerContent,
+        } as const));
+        const task = async (): Promise<void> => {
+          try {
+            await Promise.allSettled(records.map((record) => (
+              Promise.resolve().then(() => rawContentStore.write(record))
+            )));
+          } catch {
+            // Diagnostic storage must never change the Journey result.
+          }
+        };
+        try {
+          scheduleAfterResponse(task);
+        } catch {
+          // A platform scheduler failure must not change the Journey result.
+        }
+      }
+    } catch {
+      // Diagnostic storage must never change the Journey result.
+    }
+  }
   return json({
     journey: { id: journeyId, route, token },
     decision: result.decision,
     diagnostics: result.diagnostics,
+    rawContentEligible: deps.rawContentSamplingEnabled === true
+      && consent !== null
+      && rawContentSampled,
   });
 }

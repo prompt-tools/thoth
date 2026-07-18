@@ -626,6 +626,7 @@ export interface JourneyTurnResult {
   journey: { id: string; route: JourneyRoute; token: string };
   decision: AgentDecision;
   diagnostics: TurnDiagnostics | AdaptiveTurnResult["diagnostics"];
+  rawContentEligible: boolean;
 }
 
 /** Built-in demo guide boundary. The server assigns and signs the route; the
@@ -637,6 +638,8 @@ export async function requestJourneyTurn(
     precision: Precision;
     journeyId?: string;
     journeyToken?: string;
+    rawContentConsent?: boolean;
+    complete?: boolean;
   },
   fetcher: typeof fetch = fetch,
 ): Promise<JourneyTurnResult> {
@@ -685,7 +688,8 @@ export async function requestJourneyTurn(
     || !Array.isArray(decision.visibleOptionIds)
     || decision.visibleOptionIds.some((id) => typeof id !== "string")
     || !raw?.diagnostics
-    || typeof raw.diagnostics !== "object") {
+    || typeof raw.diagnostics !== "object"
+    || typeof raw.rawContentEligible !== "boolean") {
     throw new AdaptiveRouteError("journey_invalid_payload", "Journey 服务返回了无效结果。", {
       retryable: true,
     });
