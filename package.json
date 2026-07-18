@@ -31,10 +31,6 @@
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.2.0",
-    "@langfuse/client": "^5.4.1",
-    "@langfuse/otel": "^5.4.1",
-    "@langfuse/tracing": "^5.4.1",
-    "@opentelemetry/sdk-node": "^0.218.0",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.2.0",
     "@types/node": "^22.10.10",

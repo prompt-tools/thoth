@@ -12,7 +12,7 @@ import { DEFAULT_PROVIDER_ID, getProvider } from "@/lib/prompt/agent/providers";
 import { suggestedIdsFor } from "@/lib/prompt/agent/audit-model";
 import { resolveVisibleOptions } from "@/lib/prompt/agent/options-resolver";
 import { appendAnswer, selectionValueFor, buildRenderInputs, withInferredSubject } from "@/lib/prompt/agent/history";
-import { clearAgentLog, logAgent, getAgentLog } from "@/lib/prompt/agent/debug-log";
+import { clearAgentLog, logAgent } from "@/lib/prompt/agent/debug-log";
 import { routePrimaryType, suggestedIdsFromDescription, inferSubjectOptionIds } from "@/lib/prompt/agent/routing";
 import type { Precision } from "@/lib/prompt/agent/gradient";
 import { computeFillSet } from "@/lib/prompt/agent/fill";
@@ -145,7 +145,6 @@ export function useAgentGuideController() {
   const [decisionSource, setDecisionSource] = useState<"model" | "fallback" | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [telemetryEnabled, setTelemetryEnabled] = useState(false);
 
   // A5: track which dimensions were auto-filled (for Pass B UI)
   const [autoFilledQuestionIds, setAutoFilledQuestionIds] = useState<Set<string>>(new Set());
@@ -167,8 +166,6 @@ export function useAgentGuideController() {
   keyRef.current = apiKey;
   // Monotonic turn id — lets us discard responses from superseded fetches.
   const sessionRef = useRef(0);
-  // Stable id for the whole describe→done journey (telemetry trace key).
-  const sessionIdRef = useRef("");
   // Server-signed proof that may advance a legacy Adaptive Ask or Built-in Journey.
   const turnTokenRef = useRef("");
   const journeyIdRef = useRef("");
@@ -177,30 +174,31 @@ export function useAgentGuideController() {
   // exact signed history extension, not the last committed prefix.
   const pendingHistoryRef = useRef<AgentHistoryItem[] | null>(null);
 
-  /** Fire-and-forget telemetry: persist this session's full step log (presented option ids
-   *  + user selections + auto-fills + final prompt) to /api/telemetry → Langfuse. Uses
-   *  sendBeacon so it survives page unload (captures abandonment). Never throws. */
-  const flushTelemetry = useCallback((endedReason: string, finalPrompt?: { zh: string; en: string }) => {
-    if (!telemetryEnabled || !sessionIdRef.current) return;
+  const reportOutcome = useCallback((eventType: "answer_submitted" | "turn_skipped" | "prompt_rendered") => {
+    if (!BUILTIN_DEMO || !journeyIdRef.current || !turnTokenRef.current) return;
     try {
       const body = JSON.stringify({
-        sessionId: sessionIdRef.current,
-        seed: descriptionRef.current,
-        primaryType: routePrimaryType(descriptionRef.current),
-        precision: precisionRef.current,
-        finalPrompt: finalPrompt ?? null,
-        endedReason,
-        entries: getAgentLog(),
+        journeyId: journeyIdRef.current,
+        journeyToken: turnTokenRef.current,
+        eventType,
       });
       if (typeof navigator !== "undefined" && navigator.sendBeacon) {
-        navigator.sendBeacon("/api/telemetry", new Blob([body], { type: "application/json" }));
-      } else {
-        void fetch("/api/telemetry", { method: "POST", headers: { "content-type": "application/json" }, body, keepalive: true });
+        if (navigator.sendBeacon("/api/telemetry", new Blob([body], { type: "application/json" }))) return;
       }
+      const deliver = async () => {
+        const response = await fetch("/api/telemetry", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body,
+          keepalive: true,
+        });
+        if (!response.ok) throw new Error("Outcome telemetry was rejected");
+      };
+      void deliver().catch(() => deliver().catch(() => undefined));
     } catch {
-      /* telemetry must never break the user's flow */
+      // Outcome telemetry must never break the user's flow.
     }
-  }, [telemetryEnabled]);
+  }, []);
 
   // Hydrate provider/key from localStorage once, after mount. Keeping this out
   // of the initial useState avoids the SSR hydration mismatch; the gate may
@@ -250,12 +248,11 @@ export function useAgentGuideController() {
     });
   }, [phase, history, manifest, description, primaryType]);
 
-  // Telemetry: when a session completes, persist the full journey + the final prompt.
   useEffect(() => {
     if (phase === "done" && rendered) {
-      flushTelemetry("done", { zh: rendered.zhPrompt, en: rendered.enPrompt });
+      reportOutcome("prompt_rendered");
     }
-  }, [phase, rendered, flushTelemetry]);
+  }, [phase, rendered, reportOutcome]);
 
   // B1: derive a display-friendly summary of auto-filled dimensions
   const autoFilledSummary = useMemo(() => {
@@ -471,7 +468,6 @@ export function useAgentGuideController() {
       descriptionRef.current = "";
       setPrecision("simple");
       setAutoFilledQuestionIds(new Set());
-      setTelemetryEnabled(false);
       precisionRef.current = "simple";
       sessionRef.current++; // void any in-flight fetch from a prior session
       consecutiveFallbackRef.current = 0;
@@ -514,7 +510,6 @@ export function useAgentGuideController() {
       journeyRouteRef.current = null;
       setJourneyRoute(null);
       pendingHistoryRef.current = null;
-      sessionIdRef.current = (typeof crypto !== "undefined" && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now());
       logAgent("describe", { text: text.trim() || "(空，直接开始)", primaryType: routePrimaryType(text) });
       setPhase("asking");
       void fetchNext([]);
@@ -619,9 +614,9 @@ export function useAgentGuideController() {
       setHistory(nextHistory);
     }
     if (serverValidated) pendingHistoryRef.current = nextHistory;
-    flushTelemetry("submit"); // checkpoint each answer (captures abandonment too)
+    reportOutcome("answer_submitted");
     void fetchNext(nextHistory);
-  }, [decision, currentDimension, draft, draftText, history, fetchNext, flushTelemetry, primaryType]);
+  }, [decision, currentDimension, draft, draftText, history, fetchNext, reportOutcome, primaryType]);
 
   const skipStep = useCallback(() => {
     if (!decision || !currentDimension) return;
@@ -646,9 +641,9 @@ export function useAgentGuideController() {
     if (serverValidated) pendingHistoryRef.current = nextHistory;
     setDraft([]);
     setDraftText("");
-    flushTelemetry("skip");
+    reportOutcome("turn_skipped");
     void fetchNext(nextHistory);
-  }, [decision, currentDimension, history, fetchNext, flushTelemetry, primaryType]);
+  }, [decision, currentDimension, history, fetchNext, reportOutcome, primaryType]);
 
   const finishNow = useCallback(async () => {
     // Nothing to stitch if the user hasn't answered anything yet.
@@ -715,7 +710,6 @@ export function useAgentGuideController() {
     setPrecision("simple");
     precisionRef.current = "simple";
     setAutoFilledQuestionIds(new Set());
-    setTelemetryEnabled(false);
     sessionRef.current++; // void any in-flight fetch
     consecutiveFallbackRef.current = 0;
     turnTokenRef.current = "";
@@ -765,8 +759,6 @@ export function useAgentGuideController() {
     precision,
     setPrecision: (p: Precision) => { precisionRef.current = p; setPrecision(p); },
     primaryType,
-    telemetryEnabled,
-    setTelemetryEnabled,
     builtinDemo: BUILTIN_DEMO,
     adaptiveRouting: BUILTIN_DEMO ? journeyRoute === "adaptive" : ADAPTIVE_ROUTING,
     readKeyFor: (id: string) => readStorage(keyStorageFor(id)),

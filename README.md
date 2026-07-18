@@ -57,7 +57,7 @@ npm run dev
 
 ## 技术栈
 
-Next.js 15 · TypeScript 5.9 · React 19 · Tailwind CSS v3 · Vitest 4。部署在 Vercel:`/api/llm` 服务端代理调用模型(内置 key)；仅在用户同意后，`/api/telemetry` 才记录本次会话用于分析。
+Next.js 15 · TypeScript 5.9 · React 19 · Tailwind CSS v3 · Vitest 4。部署在 Vercel：`/api/llm` 服务端代理调用模型（内置 key）；`/api/telemetry` 只接收与当前服务端签名 Journey 状态匹配的无内容结果事件，不保存主题描述、自由文本、回答历史、模型原始输出或最终提示词。
 
 已知残留风险：`npm audit --omit=dev` 仍报告 Next 内嵌 PostCSS 的 2 个中等告警（当前无可用修复）。应用不编译用户提供的 CSS，因此不强制覆盖依赖树；待 Next 提供安全版本后正常升级。
 

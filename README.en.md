@@ -55,8 +55,10 @@ dimensions into understandable choices.
 ## Stack
 
 Next.js 15 · TypeScript 5.9 · React 19 · Tailwind CSS v3 · Vitest 4. Deployed on
-Vercel: `/api/llm` proxies the model server-side (built-in key); with user consent,
-`/api/telemetry` records the Journey for analysis.
+Vercel: `/api/llm` proxies the model server-side (built-in key). `/api/telemetry`
+accepts only content-free outcome events that match the current server-signed
+Journey state; it never stores the subject description, free text, answer
+history, raw model output, or final prompt.
 
 Known residual risk: `npm audit --omit=dev` still reports two moderate findings in
 Next's nested PostCSS with no fix available. The app does not compile user-supplied
