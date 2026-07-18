@@ -1,7 +1,9 @@
 import { randomUUID } from "node:crypto";
+import { after } from "next/server";
 import { liveAdaptiveExchange } from "@/lib/prompt/agent/adaptive-provider-http";
 import { handleJourneyTurnRequest } from "@/lib/prompt/agent/journey-turn-runtime";
 import { ProviderTransportError, type ProxyRequest } from "@/lib/prompt/agent/client";
+import { createRawContentStore } from "@/lib/prompt/agent/raw-content-store";
 import { createUpstashAttemptStore } from "@/lib/prompt/agent/upstash-attempt-store";
 
 export const runtime = "nodejs";
@@ -58,10 +60,26 @@ async function fixedTransport(request: ProxyRequest, callerSignal?: AbortSignal)
 
 export function POST(request: Request): Promise<Response> {
   const adaptiveEnabled = process.env.ADAPTIVE_ROUTING_ENABLED === "1";
+  const attemptUrl = process.env.UPSTASH_REDIS_REST_URL?.trim().replace(/\/+$/, "") ?? "";
+  const attemptToken = process.env.UPSTASH_REDIS_REST_TOKEN?.trim() ?? "";
+  const rawUrl = process.env.RAW_CONTENT_REDIS_REST_URL?.trim().replace(/\/+$/, "") ?? "";
+  const rawToken = process.env.RAW_CONTENT_REDIS_REST_TOKEN?.trim() ?? "";
   const attemptStore = createUpstashAttemptStore({
-    url: process.env.UPSTASH_REDIS_REST_URL ?? "",
-    token: process.env.UPSTASH_REDIS_REST_TOKEN ?? "",
+    url: attemptUrl,
+    token: attemptToken,
   });
+  const rawContentStore = createRawContentStore({
+    url: rawUrl,
+    token: rawToken,
+  });
+  const rawContentSamplingEnabled = process.env.RAW_CONTENT_SAMPLING_ENABLED === "1"
+    && process.env.RAW_CONTENT_RETENTION_VERIFIED === "1"
+    && !!attemptUrl
+    && !!attemptToken
+    && !!rawUrl
+    && !!rawToken
+    && rawUrl !== attemptUrl
+    && rawToken !== attemptToken;
   return handleJourneyTurnRequest(request, {
     secret: process.env.ADAPTIVE_TURN_SECRET,
     release: process.env.JOURNEY_RELEASE?.trim() || process.env.VERCEL_GIT_COMMIT_SHA?.trim() || "local",
@@ -71,6 +89,9 @@ export function POST(request: Request): Promise<Response> {
     newJourneyId: () => randomUUID(),
     newAttemptId: () => randomUUID(),
     attemptStore,
+    rawContentStore,
+    rawContentSamplingEnabled,
+    scheduleAfterResponse: (task) => after(task),
     fixedTransport: (providerRequest) => fixedTransport(providerRequest, request.signal),
     adaptiveExchange: liveAdaptiveExchange,
   });

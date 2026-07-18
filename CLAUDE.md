@@ -32,7 +32,8 @@ src/
 │   ├── page.tsx                      # Home = the portrait prompt wizard
 │   └── api/
 │       ├── llm/route.ts              # Server proxy → model provider (built-in key)
-│       └── telemetry/route.ts        # Signed content-free outcome events → Upstash
+│       ├── telemetry/route.ts        # Signed content-free outcome events → Upstash
+│       └── raw-content/route.ts      # Signed completion diagnostics (disabled by default)
 ├── components/prompt-guide/
 │   ├── agent-demo-client.tsx         # Wizard UI (describe → ask → done)
 │   ├── use-agent-guide-controller.ts # Flow state, fetch-next, auto-fill, telemetry
@@ -41,6 +42,7 @@ src/
 └── lib/prompt/
     ├── agent/                        # Rule routing + AI candidate filtering
     │   ├── client.ts                 # buildTurnRequest / autoFill (seed-aware)
+    │   ├── raw-content-store.ts      # Separate server-only write boundary/store for approved raw diagnostics
     │   ├── active-dimensions.ts      # which dims are active for a precision tier
     │   ├── decision.ts · fill.ts · catalog-manifest.ts · debug-log.ts
     ├── options/image/                # Image option catalogs only
@@ -63,6 +65,9 @@ Server-only env vars (never `NEXT_PUBLIC_`, never in the browser bundle):
 | `ADAPTIVE_CANARY_EXPOSURE=0|10|50|100` | Percentage of new Built-in Journeys assigned to Adaptive; defaults to `0` |
 | `ADAPTIVE_ROUTING_ENABLED=1` | Allow non-zero Adaptive exposure and the legacy BYOK Adaptive boundary; absent forces new Built-in Journeys to fixed |
 | `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` | Durable server-only store for content-free Journey attempt lifecycles and outcome events; Built-in provider calls fail closed when unavailable |
+| `RAW_CONTENT_REDIS_REST_URL` / `RAW_CONTENT_REDIS_REST_TOKEN` | Dedicated server-only raw-store credential variables; deployment-owner store isolation and ACL verification required; never browser credentials |
+| `RAW_CONTENT_SAMPLING_ENABLED=1` | Enables the stable server-side 20% raw-content sample gate |
+| `RAW_CONTENT_RETENTION_VERIFIED=1` | Confirms deployment-owner evidence for raw TTL deletion, access controls, and provider backup/log retention; required with sampling flag for raw writes |
 
 Public build-time flags:
 
@@ -83,15 +88,74 @@ state in the current server-signed Journey token:
 | `prompt_rendered` | `done` |
 
 The server derives Journey, release, route, turn, state, and question identity
-from the token. Other client fields are discarded. Subject descriptions, free
-text, answer history, provider output, and final prompts are never stored by
-this boundary.
+from the token. Other client fields are discarded. The signed content-free
+Journey/turn/attempt records remain independent of raw consent and expire after
+30 days. Anonymous UTC-day aggregates contain no Journey or attempt IDs and
+expire after 90 days.
+
+## Raw diagnostic capture / 原始诊断留存
+
+UI raw-diagnostic consent is explicit and off by default. Only a stable
+server-side 20% of consented Journeys qualifies; retries remain in the same
+sample. Approved raw content includes the Subject brief, each answer's
+`questionId`/selected-option IDs/free text, the final Chinese and English
+prompts recomputed server-side from the signed Journey snapshot, and this
+provider allowlist: the first OpenAI choice's `finish_reason`, message text,
+`tool_calls[].function.name`, and untouched `arguments`; or Anthropic
+`stop_reason`, text blocks, and `tool_use` name/input. Each raw record also
+retains internal correlation/expiry metadata: `version`, `journeyId`,
+`release`, `route`, `turn`, provider-record `delivery`, `recordedAt`, and
+`expiresAt`; these are not provider response IDs. Provider response IDs (OpenAI
+`id`/`tool_calls[].id`, Anthropic `tool_use.id`), model, usage, system
+fingerprints, headers, and other provider metadata are discarded. For Built-in
+fixed completion, the browser sends the completed history, including
+fixed-route auto-fill, through the Journey completion boundary. The server
+validates that canonical extension and issues a Done token bound to the final
+snapshot before rendering and raw final-prompt recomputation. Raw expires
+within 14 days and every write goes through `raw-content-store.ts` using the
+dedicated server-side raw credential variables; deployment-owner store
+isolation and ACL verification are still required. Completion diagnostics enter
+through `/api/raw-content`; provider content is captured directly at the server
+Journey boundary. No raw read API exists. Browser keys, repository/build
+artifacts, and replay artifacts are excluded.
+
+Raw writes require both `RAW_CONTENT_SAMPLING_ENABLED=1` and
+`RAW_CONTENT_RETENTION_VERIFIED=1`, plus `RAW_CONTENT_REDIS_REST_URL` and
+`RAW_CONTENT_REDIS_REST_TOKEN`. Every raw-store key is written with an
+absolute `PXAT` no later than `recordedAt + 14 days`; that constrains only the
+Redis key TTL. It does not prove ACLs, backup retention, log retention, or
+provider/all-media retention. Production raw remains blocked/off in this
+implementation: the deployment owner must independently verify each gate,
+and `RAW_CONTENT_RETENTION_VERIFIED=1` stays unset in production until those
+checks pass. The default-skipped `npm run verify:retention-live` check must be
+run only against isolated non-production Redis with these test-only variables
+and the exact isolation acknowledgement:
+
+```text
+RAW_RETENTION_TEST_ISOLATION_ACK=I_UNDERSTAND_ISOLATED_NON_PRODUCTION
+RAW_RETENTION_TEST_RAW_REDIS_REST_URL
+RAW_RETENTION_TEST_RAW_REDIS_REST_TOKEN
+RAW_RETENTION_TEST_ATTEMPT_REDIS_REST_URL
+RAW_RETENTION_TEST_ATTEMPT_REDIS_REST_TOKEN
+```
+
+The check creates random short-lived probe keys and verifies that each key is
+first visible and then deleted. A missing acknowledgement or test credential
+fails the check; it does not read the production `RAW_CONTENT_REDIS_REST_*` or
+`UPSTASH_REDIS_REST_*` credentials. This implementation did not run that
+check. Upstash's ordinary public terms do not currently prove that
+backups, logs, or all media are deleted within 14 days, so a passing TTL probe
+cannot replace the deployment owner's ACL, backup, log, and all-media
+retention verification. If evidence is missing, content-free telemetry
+continues and raw stays disabled. This file does not claim that the current
+Vercel deployment is configured or that live deletion passed.
 
 ## Commands / 命令
 
 ```bash
 npm run dev
 npm run verify       # typecheck + lint + test + build (CI gate)
+npm run verify:retention-live  # isolated non-production Redis only; explicit opt-in
 npm test
 npm run typecheck
 npm run build

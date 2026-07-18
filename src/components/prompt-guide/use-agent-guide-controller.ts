@@ -129,6 +129,12 @@ export function useAgentGuideController() {
   const descriptionRef = useRef("");
   descriptionRef.current = description;
 
+  // Raw diagnostic content is strictly opt-in for each new Built-in Journey.
+  // Keep a ref alongside state so the initial async request observes the value
+  // selected immediately before the user presses Start.
+  const [rawContentConsent, setRawContentConsentState] = useState(false);
+  const rawContentConsentRef = useRef(false);
+
   // C-9c: precision state
   const [precision, setPrecision] = useState<Precision>("simple");
   const precisionRef = useRef<Precision>("simple");
@@ -170,9 +176,18 @@ export function useAgentGuideController() {
   const turnTokenRef = useRef("");
   const journeyIdRef = useRef("");
   const journeyRouteRef = useRef<"fixed" | "adaptive" | null>(null);
+  const rawContentEligibleRef = useRef(false);
+  // Exact history snapshot bound into the latest signed Journey token. Fixed
+  // autofill is re-signed before rendering, so raw recomputation sees the same
+  // history as the user-facing prompt.
+  const journeySnapshotHistoryRef = useRef<AgentHistoryItem[]>([]);
   // Server-validated answers remain pending until accepted. Retry resends the
   // exact signed history extension, not the last committed prefix.
   const pendingHistoryRef = useRef<AgentHistoryItem[] | null>(null);
+  const pendingCompletionRef = useRef<{
+    history: AgentHistoryItem[];
+    filledIds: Set<string>;
+  } | null>(null);
 
   const reportOutcome = useCallback((eventType: "answer_submitted" | "turn_skipped" | "prompt_rendered") => {
     if (!BUILTIN_DEMO || !journeyIdRef.current || !turnTokenRef.current) return;
@@ -199,6 +214,77 @@ export function useAgentGuideController() {
       // Outcome telemetry must never break the user's flow.
     }
   }, []);
+
+  const reportRawCompletion = useCallback((input: {
+    subjectBrief: string;
+    history: AgentHistoryItem[];
+    precision: Precision;
+  }) => {
+    if (!BUILTIN_DEMO
+      || !rawContentConsentRef.current
+      || !rawContentEligibleRef.current
+      || !journeyIdRef.current
+      || !turnTokenRef.current) return;
+    try {
+      const body = JSON.stringify({
+        journeyId: journeyIdRef.current,
+        journeyToken: turnTokenRef.current,
+        ...input,
+      });
+      const deliver = async () => {
+        const response = await fetch("/api/raw-content", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body,
+        });
+        if (!response.ok) throw new Error("Raw-content telemetry was rejected");
+      };
+      void deliver().catch(() => deliver().catch(() => undefined));
+    } catch {
+      // Consented diagnostics must never change the user's prompt flow.
+    }
+  }, []);
+
+  const completeBuiltInJourney = useCallback(async (
+    completedHistory: AgentHistoryItem[],
+    filledIds: Set<string>,
+    session: number,
+  ): Promise<void> => {
+    const journeyId = journeyIdRef.current;
+    const journeyToken = turnTokenRef.current;
+    if (!journeyId || !journeyToken) throw new Error("Journey completion proof is unavailable");
+    pendingCompletionRef.current = { history: completedHistory, filledIds };
+    const result = await requestJourneyTurn({
+      subjectBrief: descriptionRef.current,
+      history: completedHistory,
+      precision: precisionRef.current,
+      journeyId,
+      journeyToken,
+      complete: true,
+    });
+    if (sessionRef.current !== session) return;
+    if (!result.decision.done || result.journey.id !== journeyId) {
+      throw new Error("Journey completion was not signed");
+    }
+    journeyIdRef.current = result.journey.id;
+    journeyRouteRef.current = result.journey.route;
+    turnTokenRef.current = result.journey.token;
+    rawContentEligibleRef.current = result.rawContentEligible === true;
+    journeySnapshotHistoryRef.current = completedHistory;
+    setJourneyRoute(result.journey.route);
+    pendingCompletionRef.current = null;
+    pendingHistoryRef.current = null;
+    setAutoFilledQuestionIds(filledIds);
+    setHistory(completedHistory);
+    const { selections: completedSelections, freeTexts: completedFreeTexts } = buildRenderInputs(
+      withInferredSubject(completedHistory, descriptionRef.current, primaryType),
+      manifest,
+    );
+    setSelections(completedSelections);
+    setFreeTexts(completedFreeTexts);
+    setDecision(result.decision);
+    setPhase("done");
+  }, [manifest, primaryType]);
 
   // Hydrate provider/key from localStorage once, after mount. Keeping this out
   // of the initial useState avoids the SSR hydration mismatch; the gate may
@@ -251,8 +337,13 @@ export function useAgentGuideController() {
   useEffect(() => {
     if (phase === "done" && rendered) {
       reportOutcome("prompt_rendered");
+      reportRawCompletion({
+        subjectBrief: descriptionRef.current,
+        history: journeySnapshotHistoryRef.current,
+        precision: precisionRef.current,
+      });
     }
-  }, [phase, rendered, reportOutcome]);
+  }, [phase, rendered, reportOutcome, reportRawCompletion]);
 
   // B1: derive a display-friendly summary of auto-filled dimensions
   const autoFilledSummary = useMemo(() => {
@@ -287,23 +378,29 @@ export function useAgentGuideController() {
       setAdaptiveProjection(null);
       setDecisionSource(null);
 
-      // H3: browser-side safety ceiling
-      const priorRouteIsAdaptive = BUILTIN_DEMO
-        ? journeyRouteRef.current === "adaptive"
-        : ADAPTIVE_ROUTING;
-      if (!priorRouteIsAdaptive && nextHistory.length >= H3_MAX_TURNS) {
-        logAgent("decision", { done: true, reason: "h3_ceiling", turns: nextHistory.length });
-        setPhase("done");
-        setLoading(false);
-        return;
-      }
-
       try {
+        // H3: browser-side safety ceiling
+        const priorRouteIsAdaptive = BUILTIN_DEMO
+          ? journeyRouteRef.current === "adaptive"
+          : ADAPTIVE_ROUTING;
+        if (!priorRouteIsAdaptive && nextHistory.length >= H3_MAX_TURNS) {
+          logAgent("decision", { done: true, reason: "h3_ceiling", turns: nextHistory.length });
+          if (BUILTIN_DEMO) {
+            await completeBuiltInJourney(nextHistory, new Set<string>(), mySession);
+          } else {
+            setPhase("done");
+          }
+          return;
+        }
+
         const turnResult = BUILTIN_DEMO
           ? await requestJourneyTurn({
               subjectBrief: descriptionRef.current,
               history: nextHistory,
               precision: precisionRef.current,
+              ...(!turnTokenRef.current
+                ? { rawContentConsent: rawContentConsentRef.current }
+                : {}),
               ...(journeyIdRef.current ? { journeyId: journeyIdRef.current } : {}),
               ...(turnTokenRef.current ? { journeyToken: turnTokenRef.current } : {}),
             })
@@ -343,6 +440,8 @@ export function useAgentGuideController() {
           journeyIdRef.current = turnResult.journey.id;
           journeyRouteRef.current = turnResult.journey.route;
           turnTokenRef.current = turnResult.journey.token;
+          rawContentEligibleRef.current = turnResult.rawContentEligible === true;
+          journeySnapshotHistoryRef.current = nextHistory;
           setJourneyRoute(turnResult.journey.route);
         } else if (activeAdaptive) {
           turnTokenRef.current = browserProjection?.kind === "ask" ? browserProjection.turnToken : "";
@@ -378,7 +477,11 @@ export function useAgentGuideController() {
             reason: "fallbackGiveUp",
             consecutiveFallbacks: consecutiveFallbackRef.current,
           });
-          setPhase("done");
+          if (BUILTIN_DEMO) {
+            await completeBuiltInJourney(nextHistory, new Set<string>(), mySession);
+          } else {
+            setPhase("done");
+          }
           return;
         }
         setDecisionSource(fallbackUsed ? "fallback" : "model");
@@ -415,6 +518,11 @@ export function useAgentGuideController() {
             return;
           }
 
+          if (BUILTIN_DEMO && !activeAdaptive) {
+            await completeBuiltInJourney(filledHistory, filledIds, mySession);
+            return;
+          }
+
           setAutoFilledQuestionIds(filledIds);
           setHistory(filledHistory);
 
@@ -442,7 +550,7 @@ export function useAgentGuideController() {
         if (sessionRef.current === mySession) setLoading(false);
       }
     },
-    [manifest, primaryType]
+    [completeBuiltInJourney, manifest, primaryType]
   );
 
   const saveKeyAndStart = useCallback(
@@ -464,8 +572,11 @@ export function useAgentGuideController() {
       setDraftText("");
       setFreeTexts({});
       setPolished(null);
+      setPolishing(false);
       setDescription("");
       descriptionRef.current = "";
+      setRawContentConsentState(false);
+      rawContentConsentRef.current = false;
       setPrecision("simple");
       setAutoFilledQuestionIds(new Set());
       precisionRef.current = "simple";
@@ -474,8 +585,11 @@ export function useAgentGuideController() {
       turnTokenRef.current = "";
       journeyIdRef.current = "";
       journeyRouteRef.current = null;
+      rawContentEligibleRef.current = false;
+      journeySnapshotHistoryRef.current = [];
       setJourneyRoute(null);
       pendingHistoryRef.current = null;
+      pendingCompletionRef.current = null;
       // Collect a free-text description first; the agent routes from it.
       setPhase("describe");
     },
@@ -502,14 +616,18 @@ export function useAgentGuideController() {
       setDraftText("");
       setFreeTexts({});
       setPolished(null);
+      setPolishing(false);
       setError(null);
       setAutoFilledQuestionIds(new Set());
       clearAgentLog();
       turnTokenRef.current = "";
-      journeyIdRef.current = "";
+      journeyIdRef.current = BUILTIN_DEMO ? crypto.randomUUID() : "";
       journeyRouteRef.current = null;
+      rawContentEligibleRef.current = false;
+      journeySnapshotHistoryRef.current = [];
       setJourneyRoute(null);
       pendingHistoryRef.current = null;
+      pendingCompletionRef.current = null;
       logAgent("describe", { text: text.trim() || "(空，直接开始)", primaryType: routePrimaryType(text) });
       setPhase("asking");
       void fetchNext([]);
@@ -649,34 +767,50 @@ export function useAgentGuideController() {
     // Nothing to stitch if the user hasn't answered anything yet.
     if (history.length === 0) return;
     const mySession = ++sessionRef.current;
+    setLoading(true);
+    setError(null);
     logAgent("finish", { askedSoFar: history.map((h) => h.questionId) });
-
-    const { filledHistory, filledIds } = await runSecondaryAutofill({
-      history,
-      manifest,
-      description: descriptionRef.current,
-      precision: precisionRef.current,
-      providerId: providerRef.current,
-      apiKey: keyRef.current,
-      ...(BUILTIN_DEMO && journeyIdRef.current && turnTokenRef.current
-        ? { journey: { id: journeyIdRef.current, token: turnTokenRef.current } }
-        : {}),
-    });
-    if (sessionRef.current !== mySession) return;
-
-    setAutoFilledQuestionIds(filledIds);
-    setHistory(filledHistory);
-    const { selections: sel, freeTexts: ft } = buildRenderInputs(
-      withInferredSubject(filledHistory, descriptionRef.current, primaryType),
-      manifest,
-    );
-    setSelections(sel);
-    setFreeTexts(ft);
-    setPhase("done");
-  }, [history, manifest, primaryType]);
+    try {
+      const { filledHistory, filledIds } = BUILTIN_DEMO && journeyRouteRef.current === "adaptive"
+        ? { filledHistory: history, filledIds: new Set<string>() }
+        : await runSecondaryAutofill({
+            history,
+            manifest,
+            description: descriptionRef.current,
+            precision: precisionRef.current,
+            providerId: providerRef.current,
+            apiKey: keyRef.current,
+            ...(BUILTIN_DEMO && journeyIdRef.current && turnTokenRef.current
+              ? { journey: { id: journeyIdRef.current, token: turnTokenRef.current } }
+              : {}),
+          });
+      if (sessionRef.current !== mySession) return;
+      if (BUILTIN_DEMO) {
+        await completeBuiltInJourney(filledHistory, filledIds, mySession);
+        return;
+      }
+      setAutoFilledQuestionIds(filledIds);
+      setHistory(filledHistory);
+      const { selections: sel, freeTexts: ft } = buildRenderInputs(
+        withInferredSubject(filledHistory, descriptionRef.current, primaryType),
+        manifest,
+      );
+      setSelections(sel);
+      setFreeTexts(ft);
+      setPhase("done");
+    } catch (e) {
+      if (sessionRef.current !== mySession) return;
+      setError((BUILTIN_DEMO || ADAPTIVE_ROUTING)
+        ? projectAdaptiveErrorForBrowser(e).message
+        : e instanceof Error ? e.message : String(e));
+    } finally {
+      if (sessionRef.current === mySession) setLoading(false);
+    }
+  }, [completeBuiltInJourney, history, manifest, primaryType]);
 
   const polish = useCallback(async () => {
     if (!rendered) return;
+    const mySession = sessionRef.current;
     setPolishing(true);
     setError(null);
     try {
@@ -687,11 +821,13 @@ export function useAgentGuideController() {
           ? { journey: { id: journeyIdRef.current, token: turnTokenRef.current } }
           : {}),
       });
+      if (sessionRef.current !== mySession) return;
       setPolished(result);
     } catch (e) {
+      if (sessionRef.current !== mySession) return;
       setError(e instanceof Error ? e.message : String(e));
     } finally {
-      setPolishing(false);
+      if (sessionRef.current === mySession) setPolishing(false);
     }
   }, [rendered]);
 
@@ -704,9 +840,12 @@ export function useAgentGuideController() {
     setDraftText("");
     setFreeTexts({});
     setPolished(null);
+    setPolishing(false);
     setError(null);
     setDescription("");
     descriptionRef.current = "";
+    setRawContentConsentState(false);
+    rawContentConsentRef.current = false;
     setPrecision("simple");
     precisionRef.current = "simple";
     setAutoFilledQuestionIds(new Set());
@@ -715,21 +854,45 @@ export function useAgentGuideController() {
     turnTokenRef.current = "";
     journeyIdRef.current = "";
     journeyRouteRef.current = null;
+    rawContentEligibleRef.current = false;
+    journeySnapshotHistoryRef.current = [];
     setJourneyRoute(null);
     pendingHistoryRef.current = null;
+    pendingCompletionRef.current = null;
     logAgent("restart");
     // Back to the description step so the user can restate their goal.
     setPhase("describe");
   }, []);
 
   const retryStep = useCallback(() => {
+    const pendingCompletion = pendingCompletionRef.current;
+    if (pendingCompletion) {
+      const mySession = ++sessionRef.current;
+      setLoading(true);
+      setError(null);
+      void completeBuiltInJourney(
+        pendingCompletion.history,
+        pendingCompletion.filledIds,
+        mySession,
+      ).catch((e) => {
+        if (sessionRef.current === mySession) {
+          setError(projectAdaptiveErrorForBrowser(e).message);
+        }
+      }).finally(() => {
+        if (sessionRef.current === mySession) setLoading(false);
+      });
+      return;
+    }
     void fetchNext(pendingHistoryRef.current ?? history);
-  }, [history, fetchNext]);
+  }, [completeBuiltInJourney, history, fetchNext]);
 
   /** Return to the key/provider gate to switch provider or re-enter a key. */
   const reconfigure = useCallback(() => {
     sessionRef.current++; // void any in-flight fetch
     pendingHistoryRef.current = null;
+    pendingCompletionRef.current = null;
+    setPolished(null);
+    setPolishing(false);
     logAgent("reconfigure");
     if (BUILTIN_DEMO) return;
     setPhase("needsKey");
@@ -756,6 +919,11 @@ export function useAgentGuideController() {
     polishing,
     manifest,
     description,
+    rawContentConsent,
+    setRawContentConsent: (consent: boolean) => {
+      rawContentConsentRef.current = consent;
+      setRawContentConsentState(consent);
+    },
     precision,
     setPrecision: (p: Precision) => { precisionRef.current = p; setPrecision(p); },
     primaryType,

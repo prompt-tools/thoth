@@ -106,10 +106,7 @@ export async function replayRecord(record, metadata) {
       turnSecret: TURN_SECRET,
       now: () => FIXED_NOW,
       exchange,
-      onEvidence: (item) => evidence.push({
-        ...item,
-        ...(item.rawBody ? { rawBodyBase64: Buffer.from(item.rawBody).toString("base64"), rawBody: undefined } : {}),
-      }),
+      onEvidence: (item) => evidence.push(item),
     });
     routeStatus = response.status;
     return response;
@@ -132,7 +129,8 @@ export async function replayRecord(record, metadata) {
   const diff = compare(record.expected, actual);
   const latestEvidence = evidence.at(-1) ?? {};
   const rawEvidenceMatches = record.recording.kind !== "http"
-    || latestEvidence.rawBodyBase64 === record.recording.bodyBase64;
+    || (latestEvidence.rawBody instanceof Uint8Array
+      && Buffer.from(latestEvidence.rawBody).toString("base64") === record.recording.bodyBase64);
   const toolArgumentsMatch = record.recording.kind !== "http"
     || latestEvidence.toolArgumentsRaw === record.recording.toolArgumentsRaw;
   const injectedViolation = Boolean(record.injectedViolation);
@@ -152,6 +150,8 @@ export async function replayRecord(record, metadata) {
     schemaVersion: ARTIFACT_VERSION,
     caseId: record.caseId,
     covers: record.covers,
+    fixtureId: record.fixtureId,
+    repetition: record.repetition,
     pinned: record.pinned,
     raw: {
       recording: record.recording,

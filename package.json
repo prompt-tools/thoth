@@ -10,6 +10,7 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "verify": "npm run typecheck && npm run lint -- --max-warnings=0 && npm test && NODE_ENV=production npm run build",
+    "verify:retention-live": "RAW_RETENTION_INTEGRATION=1 vitest run src/lib/prompt/agent/retention.integration.test.ts",
     "eval": "tsx .research/scripts/eval-agent.mjs --seeds .research/eval-seeds/portrait-seeds.txt",
     "eval:report": "tsx .research/scripts/eval-report.mjs",
     "eval:adaptive": "node --import tsx .research/scripts/eval-adaptive.mjs",

@@ -2,8 +2,8 @@ import { afterEach, describe, expect, it } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { runAdaptiveReplay } from "./eval-adaptive.mjs";
-import { parseArgs } from "./adaptive-replay-support.mjs";
+import { currentMetadata, runAdaptiveReplay } from "./eval-adaptive.mjs";
+import { parseArgs, sha256, writeArtifacts } from "./adaptive-replay-support.mjs";
 
 const ROOT = path.resolve(import.meta.dirname, "../..");
 const CORPUS = path.join(ROOT, ".research/adaptive-question-recordings.jsonl");
@@ -14,6 +14,11 @@ function tempDir(label) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), `thoth-${label}-`));
   dirs.push(dir);
   return dir;
+}
+
+function pinCurrentMetadata(records) {
+  const metadata = currentMetadata();
+  for (const record of records) record.pinned = structuredClone(metadata);
 }
 
 afterEach(() => {
@@ -47,11 +52,82 @@ describe("deterministic Adaptive replay gate", () => {
     });
   });
 
+  it("keeps production-like input and provider content out of every replay artifact", async () => {
+    const inputDir = tempDir("adaptive-replay-content-free-input");
+    const out = tempDir("adaptive-replay-content-free-out");
+    const input = path.join(inputDir, "recordings.jsonl");
+    const records = fs.readFileSync(CORPUS, "utf8").trimEnd().split("\n").map(JSON.parse);
+    pinCurrentMetadata(records);
+    const record = records.find((item) => item.caseId === "valid-ask");
+    const sentinel = "PRODUCTION_REPLAY_SENTINEL_4d9c0b";
+    record.covers.push(sentinel);
+    record.input.subjectBrief = `原创游侠角色 ${sentinel}`;
+    record.recording.responseId = sentinel;
+    const provider = JSON.parse(Buffer.from(record.recording.bodyBase64, "base64").toString("utf8"));
+    const call = provider.choices[0].message.tool_calls[0];
+    const argumentsValue = JSON.parse(call.function.arguments);
+    argumentsValue.questionText = `${argumentsValue.questionText} ${sentinel}`;
+    call.function.arguments = JSON.stringify(argumentsValue);
+    provider.choices[0].message.content = sentinel;
+    record.recording.toolArgumentsRaw = call.function.arguments;
+    record.recording.bodyBase64 = Buffer.from(JSON.stringify(provider), "utf8").toString("base64");
+    fs.writeFileSync(input, `${records.map(JSON.stringify).join("\n")}\n`);
+
+    const result = await runAdaptiveReplay({ input, out });
+
+    expect(result.exitCode, result.error).toBe(0);
+    const bundle = ARTIFACTS.map((artifact) => fs.readFileSync(path.join(out, artifact), "utf8")).join("\n");
+    expect(bundle).not.toContain(sentinel);
+    const artifactObservations = fs.readFileSync(path.join(out, "observations.jsonl"), "utf8");
+    expect(artifactObservations).not.toContain("bodyBase64");
+    expect(artifactObservations).not.toContain("rawBodyBase64");
+    expect(artifactObservations).not.toContain("toolArgumentsRaw");
+    expect(artifactObservations).not.toContain('"message"');
+    const artifactRecord = artifactObservations.trimEnd().split("\n").map(JSON.parse)
+      .find((item) => item.caseId === "valid-ask");
+    expect(artifactRecord.raw.recording).toMatchObject({
+      responseBytes: Buffer.from(record.recording.bodyBase64, "base64").byteLength,
+      responseHash: sha256(Buffer.from(record.recording.bodyBase64, "base64")),
+      toolArgumentsBytes: Buffer.byteLength(record.recording.toolArgumentsRaw, "utf8"),
+      toolArgumentsHash: sha256(record.recording.toolArgumentsRaw),
+    });
+    expect(artifactRecord.outcome).toMatchObject({
+      pass: true,
+      rawEvidenceMatches: true,
+      toolArgumentsMatch: true,
+    });
+    const hashes = JSON.parse(fs.readFileSync(path.join(out, "bundle-sha256.json"), "utf8"));
+    for (const [artifact, hash] of Object.entries(hashes)) {
+      expect(hash).toBe(sha256(fs.readFileSync(path.join(out, artifact))));
+    }
+  });
+
+  it("sanitizes arbitrary branch claims at the artifact sink", () => {
+    const out = tempDir("adaptive-replay-branch-summary");
+    const sentinel = "PRODUCTION_BRANCH_SENTINEL_c8a71e";
+    writeArtifacts(out, { artifactVersion: "test" }, [], {
+      pass: false,
+      totalCases: 0,
+      passedCases: 0,
+      mismatches: 0,
+      undetectedViolations: 0,
+      invalidBranchClaims: [sentinel],
+      missingBranches: [sentinel, "valid.ask"],
+    });
+
+    const bundle = ARTIFACTS.map((artifact) => fs.readFileSync(path.join(out, artifact), "utf8")).join("\n");
+    expect(bundle).not.toContain(sentinel);
+    const summary = JSON.parse(fs.readFileSync(path.join(out, "summary.json"), "utf8"));
+    expect(summary.invalidBranchClaims).toEqual([sha256(sentinel)]);
+    expect(summary.missingBranches).toEqual(["valid.ask"]);
+  });
+
   it("exits nonzero for a deliberately wrong expectation", async () => {
     const inputDir = tempDir("adaptive-replay-wrong-input");
     const out = tempDir("adaptive-replay-wrong-out");
     const input = path.join(inputDir, "recordings.jsonl");
     const records = fs.readFileSync(CORPUS, "utf8").trimEnd().split("\n").map(JSON.parse);
+    pinCurrentMetadata(records);
     records[0].expected.routeStatus = 599;
     fs.writeFileSync(input, `${records.map(JSON.stringify).join("\n")}\n`);
 

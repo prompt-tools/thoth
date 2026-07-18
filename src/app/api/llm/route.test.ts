@@ -90,7 +90,7 @@ describe("POST /api/llm", () => {
     const fetchSpy = vi.fn().mockImplementation(async (url: string, init?: RequestInit) => {
       if (url === "https://example.upstash.io") {
         const command = JSON.parse(String(init?.body)) as string[];
-        return Response.json({ result: command[1].includes("PEXPIREAT") ? "created" : "written" });
+        return Response.json({ result: command[2] === "1" ? "created" : "written" });
       }
       return new Response("{}", { headers: { "content-type": "application/json" } });
     });
@@ -131,8 +131,8 @@ describe("POST /api/llm", () => {
     const fetchSpy = vi.fn().mockImplementation(async (url: string, init?: RequestInit) => {
       if (url === "https://example.upstash.io") {
         const command = JSON.parse(String(init?.body)) as string[];
-        if (command[1].includes("PEXPIREAT")) return Response.json({ result: "created" });
-        terminal = JSON.parse(command[4]);
+        if (command[2] === "1") return Response.json({ result: "created" });
+        terminal = JSON.parse(command[5]);
         return Response.json({ result: "written" });
       }
       return new Response(JSON.stringify({ error: "quota" }), {
@@ -191,8 +191,8 @@ describe("POST /api/llm", () => {
     const fetchSpy = vi.fn().mockImplementation(async (url: string, init?: RequestInit) => {
       if (url === "https://example.upstash.io") {
         const command = JSON.parse(String(init?.body)) as string[];
-        if (command[1].includes("PEXPIREAT")) return Response.json({ result: "created" });
-        terminal = JSON.parse(command[4]);
+        if (command[2] === "1") return Response.json({ result: "created" });
+        terminal = JSON.parse(command[5]);
         return Response.json({ result: "written" });
       }
       return new Response(JSON.stringify({
@@ -233,8 +233,8 @@ describe("POST /api/llm", () => {
     const fetchSpy = vi.fn().mockImplementation(async (url: string, init?: RequestInit) => {
       if (url === "https://example.upstash.io") {
         const command = JSON.parse(String(init?.body)) as string[];
-        if (command[1].includes("PEXPIREAT")) return Response.json({ result: "created" });
-        terminal = JSON.parse(command[4]);
+        if (command[2] === "1") return Response.json({ result: "created" });
+        terminal = JSON.parse(command[5]);
         return Response.json({ result: "written" });
       }
       providerSignal = init?.signal as AbortSignal;
@@ -281,8 +281,8 @@ describe("POST /api/llm", () => {
     const fetchSpy = vi.fn().mockImplementation(async (url: string, init?: RequestInit) => {
       if (url === "https://example.upstash.io") {
         const command = JSON.parse(String(init?.body)) as string[];
-        if (command[1].includes("PEXPIREAT")) return Response.json({ result: "created" });
-        terminal = JSON.parse(command[4]);
+        if (command[2] === "1") return Response.json({ result: "created" });
+        terminal = JSON.parse(command[5]);
         return Response.json({ result: "written" });
       }
       const providerSignal = init?.signal as AbortSignal;

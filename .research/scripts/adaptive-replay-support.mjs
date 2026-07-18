@@ -9,7 +9,7 @@ import { buildCatalogManifest } from "../../src/lib/prompt/agent/catalog-manifes
 export const ROOT = path.resolve(import.meta.dirname, "../..");
 export const FIXED_NOW = 1_700_000_000_000;
 export const TURN_SECRET = "adaptive-replay-fixed-secret-at-least-32-bytes";
-export const ARTIFACT_VERSION = "adaptive-replay-artifact-v1";
+export const ARTIFACT_VERSION = "adaptive-replay-artifact-v2";
 export const CORPUS_VERSION = "adaptive-question-recordings-v1";
 export const REQUIRED_BRANCHES = [
   "valid.ask", "valid.zero_turn_completion", "valid.later_completion",
@@ -45,6 +45,17 @@ const EVALUATOR_FILES = [
 
 export function sha256(bytes) {
   return `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
+}
+
+function digestBytes(bytes) {
+  if (bytes === undefined || bytes === null) return { bytes: null, hash: null };
+  return { bytes: bytes.byteLength, hash: sha256(bytes) };
+}
+
+function digestValue(value) {
+  if (value === undefined) return { bytes: null, hash: null };
+  const encoded = typeof value === "string" ? value : stableJson(value);
+  return digestBytes(Buffer.from(encoded, "utf8"));
 }
 
 function fileHash(relativePath) {
@@ -118,21 +129,160 @@ export function compare(expected, actual, prefix = "") {
   return keys.flatMap((key) => compare(expected[key], actual[key], prefix ? `${prefix}.${key}` : key));
 }
 
+const SAFE_FINISH_REASONS = new Set([
+  "tool_calls", "length", "content_filter", "insufficient_system_resource", "stop",
+]);
+const SAFE_FAILURE_CODES = new Set([
+  "request_too_large", "response_too_large", "invalid_json", "finish_reason", "tool_envelope",
+  "tool_arguments", "tool_arguments_invalid_json", "schema", "completion_shape",
+  "premature_completion", "ask_shape", "ask_budget_exceeded", "ask_text",
+  "option_shape", "option_cardinality", "ineligible_dimension", "option_allowlist",
+  "network_error", "adaptive_turn_timeout", "provider_cancelled", "no_safe_adaptive_turn",
+  "history_budget_exhausted", "adaptive_route_invalid_payload", "adaptive_route_failed",
+  "adaptive_browser_option_cardinality", "adaptive_browser_dimension_missing",
+  "adaptive_browser_option_missing",
+]);
+
+function diagnosticFinishReason(value) {
+  if (value == null) return null;
+  return SAFE_FINISH_REASONS.has(value) ? value : "other";
+}
+
+function diagnosticFailureCode(value) {
+  if (typeof value !== "string") return null;
+  if (SAFE_FAILURE_CODES.has(value) || /^http_[1-5][0-9]{2}$/.test(value)) return value;
+  return "other";
+}
+
+function provenanceId(value) {
+  if (typeof value !== "string") return null;
+  return /^[a-z0-9][a-z0-9._:-]{0,127}$/.test(value) ? value : sha256(value);
+}
+
+function contentFreeObservation(item) {
+  const raw = item.raw ?? {};
+  const recording = raw.recording ?? {};
+  const evidence = raw.evidence ?? {};
+  const recordedBody = recording.kind === "http" && typeof recording.bodyBase64 === "string"
+    ? Buffer.from(recording.bodyBase64, "base64")
+    : undefined;
+  const recordedBodyDigest = digestBytes(recordedBody);
+  const evidenceBodyDigest = digestBytes(evidence.rawBody);
+  const recordedToolArgumentsDigest = digestValue(recording.toolArgumentsRaw);
+  const evidenceToolArgumentsDigest = digestValue(evidence.toolArgumentsRaw);
+  const pinned = item.pinned ?? {};
+  const hashKeys = new Set([
+    "productionHash", "contractHash", "fixtureHash", "routingPromptHash", "judgePromptHash",
+    "runtimePromptHash", "catalogHash",
+  ]);
+  const safePinned = Object.fromEntries([
+    "productionHash", "contractHash", "fixtureHash", "routingPromptHash", "judgePromptHash",
+    "runtimePromptHash", "catalogHash", "contractVersion", "routingPromptVersion", "judgePromptVersion",
+  ].flatMap((key) => {
+    const value = pinned[key];
+    const valid = typeof value === "string" && (hashKeys.has(key)
+      ? /^sha256:[0-9a-f]{64}$/.test(value)
+      : /^[a-z0-9][a-z0-9.-]{0,79}$/.test(value));
+    return valid ? [[key, value]] : [];
+  }));
+  const safeDiff = Array.isArray(item.outcome?.diff)
+    ? item.outcome.diff.map((entry) => typeof entry === "string" && /^(?:routeStatus|normalized\.(?:action|source|reason|questionId|optionIds(?:\.\d+)?)|ui\.(?:action|code|status|questionId|optionIds(?:\.\d+)?|freeTextAvailable)|hardFailureCodes(?:\.\d+)?)$/.test(entry) ? entry : "$unexpected")
+    : [];
+  const normalized = {
+    action: ["ask", "completion", "error"].includes(item.normalized?.action) ? item.normalized.action : "other",
+    source: ["model", "fallback", "remainingEmpty", "route"].includes(item.normalized?.source)
+      ? item.normalized.source : "other",
+    reason: diagnosticFailureCode(item.normalized?.reason),
+    questionId: provenanceId(item.normalized?.questionId),
+    optionIds: Array.isArray(item.normalized?.optionIds)
+      ? item.normalized.optionIds.map(provenanceId).filter(Boolean) : [],
+  };
+  const ui = {
+    action: ["ask", "completion", "error"].includes(item.ui?.action) ? item.ui.action : "other",
+    code: diagnosticFailureCode(item.ui?.code),
+    status: Number.isSafeInteger(item.ui?.status) ? item.ui.status : null,
+    questionId: provenanceId(item.ui?.questionId),
+    optionIds: Array.isArray(item.ui?.optionIds)
+      ? item.ui.optionIds.map(provenanceId).filter(Boolean) : [],
+    freeTextAvailable: item.ui?.freeTextAvailable === true,
+  };
+  return {
+    schemaVersion: ARTIFACT_VERSION,
+    caseId: provenanceId(item.caseId),
+    ...(Array.isArray(item.covers) ? { covers: item.covers.filter((branch) => REQUIRED_BRANCHES.includes(branch)) } : {}),
+    ...(provenanceId(item.fixtureId) ? { fixtureId: provenanceId(item.fixtureId) } : {}),
+    ...(Number.isSafeInteger(item.repetition) ? { repetition: item.repetition } : {}),
+    ...(Object.keys(safePinned).length ? { pinned: safePinned } : {}),
+    raw: {
+      recording: {
+        kind: ["http", "network", "none"].includes(recording.kind) ? recording.kind : "other",
+        status: Number.isSafeInteger(recording.status) ? recording.status : null,
+        responseBytes: recordedBodyDigest.bytes,
+        responseHash: recordedBodyDigest.hash,
+        finishReason: diagnosticFinishReason(recording.finishReason),
+        toolArgumentsBytes: recordedToolArgumentsDigest.bytes,
+        toolArgumentsHash: recordedToolArgumentsDigest.hash,
+      },
+      routeStatus: Number.isSafeInteger(raw.routeStatus) ? raw.routeStatus : null,
+      requestBytes: Number.isSafeInteger(raw.requestBytes) ? raw.requestBytes : null,
+      exchangeCalls: Number.isSafeInteger(raw.exchangeCalls) ? raw.exchangeCalls : 0,
+      evidence: {
+        providerStatus: Number.isSafeInteger(evidence.providerStatus) ? evidence.providerStatus : null,
+        responseBytes: evidenceBodyDigest.bytes,
+        responseHash: evidenceBodyDigest.hash,
+        finishReason: diagnosticFinishReason(evidence.finishReason),
+        toolArgumentsBytes: evidenceToolArgumentsDigest.bytes,
+        toolArgumentsHash: evidenceToolArgumentsDigest.hash,
+        failureCode: diagnosticFailureCode(evidence.failureCode),
+      },
+    },
+    normalized,
+    ui,
+    judge: {
+      status: item.judge?.status === "skipped" ? "skipped" : "other",
+      providerCalls: Number.isSafeInteger(item.judge?.providerCalls) ? item.judge.providerCalls : 0,
+    },
+    outcome: {
+      pass: item.outcome?.pass === true,
+      diff: safeDiff,
+      rawEvidenceMatches: item.outcome?.rawEvidenceMatches === true,
+      toolArgumentsMatch: item.outcome?.toolArgumentsMatch === true,
+      acceptedAsModel: item.outcome?.acceptedAsModel === true,
+      violationRendered: item.outcome?.violationRendered === true,
+    },
+    actual: {
+      routeStatus: Number.isSafeInteger(item.actual?.routeStatus) ? item.actual.routeStatus : null,
+      normalized,
+      ui,
+      hardFailureCodes: Array.isArray(item.actual?.hardFailureCodes)
+        ? item.actual.hardFailureCodes.map(diagnosticFailureCode) : [],
+    },
+  };
+}
+
 export function writeArtifacts(outDir, config, observations, summary) {
   fs.mkdirSync(outDir, { recursive: true });
+  const safeObservations = observations.map(contentFreeObservation);
+  const safeSummary = {
+    ...summary,
+    invalidBranchClaims: Array.isArray(summary.invalidBranchClaims)
+      ? summary.invalidBranchClaims.map(provenanceId).filter(Boolean) : [],
+    missingBranches: Array.isArray(summary.missingBranches)
+      ? summary.missingBranches.filter((branch) => REQUIRED_BRANCHES.includes(branch)) : [],
+  };
   const report = [
-    "# Adaptive Replay Gate", "", `- Result: **${summary.pass ? "PASS" : "FAIL"}**`,
-    `- Cases: ${summary.passedCases}/${summary.totalCases}`, `- Mismatches: ${summary.mismatches}`,
-    `- Undetected violations: ${summary.undetectedViolations}`,
-    `- Invalid branch claims: ${summary.invalidBranchClaims.length ? summary.invalidBranchClaims.join(", ") : "none"}`,
-    `- Missing branches: ${summary.missingBranches.length ? summary.missingBranches.join(", ") : "none"}`,
+    "# Adaptive Replay Gate", "", `- Result: **${safeSummary.pass ? "PASS" : "FAIL"}**`,
+    `- Cases: ${safeSummary.passedCases}/${safeSummary.totalCases}`, `- Mismatches: ${safeSummary.mismatches}`,
+    `- Undetected violations: ${safeSummary.undetectedViolations}`,
+    `- Invalid branch claims: ${safeSummary.invalidBranchClaims.length ? safeSummary.invalidBranchClaims.join(", ") : "none"}`,
+    `- Missing branches: ${safeSummary.missingBranches.length ? safeSummary.missingBranches.join(", ") : "none"}`,
     "", "## Cases", "",
-    ...observations.map((item) => `- ${item.outcome.pass ? "PASS" : "FAIL"} \`${item.caseId}\`${item.outcome.diff.length ? ` — ${item.outcome.diff.join(", ")}` : ""}`), "",
+    ...safeObservations.map((item) => `- ${item.outcome.pass ? "PASS" : "FAIL"} \`${item.caseId}\`${item.outcome.diff.length ? ` — ${item.outcome.diff.join(", ")}` : ""}`), "",
   ].join("\n");
   const files = {
     "run-config.json": `${stableJson(config, 2)}\n`,
-    "observations.jsonl": observations.map((item) => stableJson(item)).join("\n") + (observations.length ? "\n" : ""),
-    "summary.json": `${stableJson(summary, 2)}\n`,
+    "observations.jsonl": safeObservations.map((item) => stableJson(item)).join("\n") + (safeObservations.length ? "\n" : ""),
+    "summary.json": `${stableJson(safeSummary, 2)}\n`,
     "report.md": report,
   };
   for (const [name, content] of Object.entries(files)) fs.writeFileSync(path.join(outDir, name), content);
