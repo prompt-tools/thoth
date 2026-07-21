@@ -1,4 +1,4 @@
-import { cpSync, existsSync, mkdirSync, rmSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 
 const source = ".open-next";
 const server = "dist/server";
@@ -12,6 +12,12 @@ for (const directory of [".build", "cloudflare", "middleware", "server-functions
   cpSync(`${source}/${directory}`, `${server}/${directory}`, { recursive: true });
 }
 
-if (!existsSync(`${server}/index.js`) || !existsSync("dist/client/BUILD_ID")) {
+const wrangler = JSON.parse(readFileSync("wrangler.jsonc", "utf8"));
+delete wrangler.$schema;
+wrangler.main = "index.js";
+wrangler.assets = { ...wrangler.assets, directory: "../client", run_worker_first: true };
+writeFileSync(`${server}/wrangler.json`, JSON.stringify(wrangler));
+
+if (!existsSync(`${server}/index.js`) || !existsSync(`${server}/wrangler.json`) || !existsSync("dist/client/BUILD_ID")) {
   throw new Error("Sites build staging failed");
 }
