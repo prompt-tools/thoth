@@ -15,6 +15,7 @@ const githubPagesConfig: NextConfig = {
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  output: "standalone",
   // Avoid picking ~/package-lock.json as monorepo root (breaks chunk paths in dev).
   outputFileTracingRoot: projectRoot,
   ...(isGithubPages ? githubPagesConfig : {})
