@@ -1,6 +1,37 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { POST } from "./route";
 import { buildAdaptiveTurnSnapshot } from "@/lib/prompt/agent/adaptive-turn";
+import { buildCatalogManifest } from "@/lib/prompt/agent/catalog-manifest";
+
+const REQUEST_ID = "00000000-0000-4000-8000-00000000000d";
+
+function fixedProviderBodyOfSize(size: number): string {
+  const subject = buildCatalogManifest().find((dimension) => dimension.questionId === "subject");
+  if (!subject) throw new Error("subject dimension is missing");
+  const response = {
+    choices: [{
+      message: {
+        tool_calls: [{
+          function: {
+            name: "select_options",
+            arguments: JSON.stringify({
+              visibleOptionIds: subject.options.slice(0, 3).map((option) => option.id),
+              helperText: "choose",
+            }),
+          },
+        }],
+      },
+    }],
+    padding: "",
+  };
+  const base = JSON.stringify(response);
+  const paddingBytes = size - Buffer.byteLength(base, "utf8");
+  if (paddingBytes < 0) throw new Error(`provider fixture exceeds ${size} bytes`);
+  response.padding = "x".repeat(paddingBytes);
+  const body = JSON.stringify(response);
+  if (Buffer.byteLength(body, "utf8") !== size) throw new Error(`provider fixture is not ${size} bytes`);
+  return body;
+}
 
 afterEach(() => {
   vi.useRealTimers();
@@ -20,7 +51,7 @@ describe("POST /api/journey-turn", () => {
     const response = await POST(new Request("http://localhost/api/journey-turn", {
       method: "POST",
       headers: { authorization: "Bearer __demo__", "content-type": "application/json" },
-      body: JSON.stringify({ subjectBrief: "原创游侠角色", history: [], precision: "simple" }),
+      body: JSON.stringify({ subjectBrief: "原创游侠角色", history: [], precision: "simple", journeyRequestId: REQUEST_ID }),
     }));
 
     expect(response.status).toBe(503);
@@ -40,7 +71,7 @@ describe("POST /api/journey-turn", () => {
     const response = await POST(new Request("http://localhost/api/journey-turn", {
       method: "POST",
       headers: { authorization: "Bearer __demo__", "content-type": "application/json" },
-      body: JSON.stringify({ subjectBrief: "原创游侠角色", history: [], precision: "simple" }),
+      body: JSON.stringify({ subjectBrief: "原创游侠角色", history: [], precision: "simple", journeyRequestId: REQUEST_ID }),
     }));
 
     expect(response.status).toBe(503);
@@ -71,6 +102,7 @@ describe("POST /api/journey-turn", () => {
         subjectBrief: "原创游侠角色",
         history: [],
         precision: "simple",
+        journeyRequestId: REQUEST_ID,
       }),
     }));
     const result = await response.json();
@@ -155,7 +187,7 @@ describe("POST /api/journey-turn", () => {
     const first = await (await POST(new Request("http://localhost/api/journey-turn", {
       method: "POST",
       headers: { authorization: "Bearer __demo__", "content-type": "application/json" },
-      body: JSON.stringify({ subjectBrief, history: [], precision: "simple" }),
+      body: JSON.stringify({ subjectBrief, history: [], precision: "simple", journeyRequestId: REQUEST_ID }),
     }))).json();
     const history = [{
       questionId: first.decision.nextQuestionId,
@@ -208,7 +240,7 @@ describe("POST /api/journey-turn", () => {
     const response = await POST(new Request("http://localhost/api/journey-turn", {
       method: "POST",
       headers: { authorization: "Bearer __demo__", "content-type": "application/json" },
-      body: JSON.stringify({ subjectBrief: "原创游侠角色", history: [], precision: "simple" }),
+      body: JSON.stringify({ subjectBrief: "原创游侠角色", history: [], precision: "simple", journeyRequestId: REQUEST_ID }),
     }));
 
     expect(response.status).toBe(200);
@@ -219,6 +251,68 @@ describe("POST /api/journey-turn", () => {
       failureCode: "http_503",
       providerStatus: 503,
     })));
+  });
+
+  it.each([
+    { size: 65_536, expectedProviderCalls: 1, expectedFailure: false },
+    { size: 65_537, expectedProviderCalls: 1, expectedFailure: true },
+  ])("bounds fixed provider responses at 64 KiB ($size bytes)", async ({
+    size,
+    expectedProviderCalls,
+    expectedFailure,
+  }) => {
+    vi.stubEnv("ADAPTIVE_TURN_SECRET", "a-strong-test-secret-with-at-least-32-bytes");
+    vi.stubEnv("JOURNEY_RELEASE", "release-a");
+    vi.stubEnv("ADAPTIVE_CANARY_EXPOSURE", "0");
+    vi.stubEnv("DEMO_DEEPSEEK_KEY", "server-key");
+    vi.stubEnv("UPSTASH_REDIS_REST_URL", "https://example.upstash.io");
+    vi.stubEnv("UPSTASH_REDIS_REST_TOKEN", "redis-token");
+    const providerBody = fixedProviderBodyOfSize(size);
+    const terminals: Array<Record<string, unknown>> = [];
+    let providerCalls = 0;
+    const fetchSpy = vi.fn().mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === "https://example.upstash.io") {
+        const command = JSON.parse(String(init?.body)) as string[];
+        if (command[2] === "1") return Response.json({ result: "created" });
+        terminals.push(JSON.parse(command[5]) as Record<string, unknown>);
+        return Response.json({ result: "written" });
+      }
+      providerCalls += 1;
+      return new Response(providerBody, { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const response = await POST(new Request("http://localhost/api/journey-turn", {
+      method: "POST",
+      headers: { authorization: "Bearer __demo__", "content-type": "application/json" },
+      body: JSON.stringify({
+        subjectBrief: "原创游侠角色",
+        history: [],
+        precision: "simple",
+        journeyRequestId: REQUEST_ID,
+      }),
+    }));
+    const result = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(providerCalls).toBe(expectedProviderCalls);
+    if (expectedFailure) {
+      expect(result).toMatchObject({ diagnostics: { source: "fallback", attempts: 1 } });
+      expect(terminals).toEqual([expect.objectContaining({
+        outcome: "failure",
+        failureCode: "response_too_large",
+        providerStatus: 200,
+      })]);
+    } else {
+      expect(result).toMatchObject({
+        journey: { route: "fixed" },
+        diagnostics: { source: "ordered", attempts: 1 },
+      });
+      expect(terminals).toEqual([expect.objectContaining({
+        outcome: "success",
+        validation: "ask",
+      })]);
+    }
   });
 
   it("propagates caller cancellation to the fixed provider and records one cancelled attempt", async () => {
@@ -254,7 +348,7 @@ describe("POST /api/journey-turn", () => {
     const responsePromise = POST(new Request("http://localhost/api/journey-turn", {
       method: "POST",
       headers: { authorization: "Bearer __demo__", "content-type": "application/json" },
-      body: JSON.stringify({ subjectBrief: "原创游侠角色", history: [], precision: "simple" }),
+      body: JSON.stringify({ subjectBrief: "原创游侠角色", history: [], precision: "simple", journeyRequestId: REQUEST_ID }),
       signal: caller.signal,
     }));
 
@@ -305,7 +399,7 @@ describe("POST /api/journey-turn", () => {
     const responsePromise = POST(new Request("http://localhost/api/journey-turn", {
       method: "POST",
       headers: { authorization: "Bearer __demo__", "content-type": "application/json" },
-      body: JSON.stringify({ subjectBrief: "原创游侠角色", history: [], precision: "simple" }),
+      body: JSON.stringify({ subjectBrief: "原创游侠角色", history: [], precision: "simple", journeyRequestId: REQUEST_ID }),
       signal: caller.signal,
     }));
 
@@ -370,7 +464,7 @@ describe("POST /api/journey-turn", () => {
     const response = await POST(new Request("http://localhost/api/journey-turn", {
       method: "POST",
       headers: { authorization: "Bearer __demo__", "content-type": "application/json" },
-      body: JSON.stringify({ subjectBrief: "原创游侠角色", history: [], precision: "simple" }),
+      body: JSON.stringify({ subjectBrief: "原创游侠角色", history: [], precision: "simple", journeyRequestId: REQUEST_ID }),
     }));
 
     expect(response.status).toBe(200);
@@ -411,7 +505,7 @@ describe("POST /api/journey-turn", () => {
     const responsePromise = POST(new Request("http://localhost/api/journey-turn", {
       method: "POST",
       headers: { authorization: "Bearer __demo__", "content-type": "application/json" },
-      body: JSON.stringify({ subjectBrief: "原创游侠角色", history: [], precision: "simple" }),
+      body: JSON.stringify({ subjectBrief: "原创游侠角色", history: [], precision: "simple", journeyRequestId: REQUEST_ID }),
       signal: caller.signal,
     }));
 
@@ -468,6 +562,7 @@ describe("POST /api/journey-turn", () => {
         subjectBrief: "女船长怒视镜头，低机位，电影海报",
         history: [],
         precision: "simple",
+        journeyRequestId: REQUEST_ID,
       }),
     }));
 

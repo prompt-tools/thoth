@@ -4,7 +4,10 @@ import type {
   AdaptiveProviderOutcome,
 } from "./adaptive-turn-runtime";
 
-async function readCappedBody(response: Response): Promise<{ body: Uint8Array; bodyTooLarge: boolean }> {
+export async function readCappedResponseBody(
+  response: Response,
+  maxBytes = ADAPTIVE_MAX_BYTES,
+): Promise<{ body: Uint8Array; bodyTooLarge: boolean }> {
   const reader = response.body?.getReader();
   if (!reader) return { body: new Uint8Array(), bodyTooLarge: false };
   const chunks: Uint8Array[] = [];
@@ -15,10 +18,10 @@ async function readCappedBody(response: Response): Promise<{ body: Uint8Array; b
       const { done, value } = await reader.read();
       if (done) break;
       if (!value?.byteLength) continue;
-      const remaining = ADAPTIVE_MAX_BYTES - size;
+      const remaining = maxBytes - size;
       if (value.byteLength > remaining) {
         if (remaining > 0) chunks.push(value.subarray(0, remaining));
-        size = ADAPTIVE_MAX_BYTES;
+        size = maxBytes;
         bodyTooLarge = true;
         await reader.cancel().catch(() => undefined);
         break;
@@ -46,7 +49,7 @@ export async function liveAdaptiveExchange(request: AdaptiveProviderRequest): Pr
     redirect: request.redirect,
     signal: request.signal,
   });
-  const { body, bodyTooLarge } = await readCappedBody(response);
+  const { body, bodyTooLarge } = await readCappedResponseBody(response);
   return {
     kind: "http",
     status: response.status,

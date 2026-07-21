@@ -4,6 +4,7 @@ import type { Precision } from "./gradient";
 import {
   assignRawContentSample,
   assignJourneyRoute,
+  deriveJourneyId,
   issueJourneyToken,
   matchesJourneySnapshot,
   parseJourneyExposure,
@@ -36,7 +37,6 @@ export interface JourneyTurnRuntimeDeps {
   exposure?: string;
   demoKey?: string;
   now: () => number;
-  newJourneyId: () => string;
   newAttemptId: () => string;
   attemptStore: AttemptStore;
   fixedTransport: (request: ProxyRequest) => Promise<unknown>;
@@ -50,10 +50,37 @@ interface JourneyInput {
   subjectBrief: string;
   history: AgentHistoryItem[];
   precision: Precision;
+  journeyRequestId?: string;
   journeyId?: string;
   journeyToken?: string;
   rawContentConsent?: boolean;
   complete?: boolean;
+}
+
+const MAX_JOURNEY_REQUEST_BYTES = 65_536;
+
+async function readRequestJson(request: Request): Promise<unknown> {
+  const declaredLength = request.headers.get("content-length");
+  if (declaredLength && /^\d+$/.test(declaredLength)
+    && Number(declaredLength) > MAX_JOURNEY_REQUEST_BYTES) {
+    throw new Error("journey_request_too_large");
+  }
+  const reader = request.body?.getReader();
+  if (!reader) throw new SyntaxError("empty request body");
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > MAX_JOURNEY_REQUEST_BYTES) {
+      await reader.cancel().catch(() => undefined);
+      throw new Error("journey_request_too_large");
+    }
+    chunks.push(value);
+  }
+  const parsed: unknown = JSON.parse(Buffer.concat(chunks, total).toString("utf8"));
+  return parsed;
 }
 
 function json(data: unknown, status = 200): Response {
@@ -80,17 +107,27 @@ function parseInput(value: unknown): JourneyInput {
   if (typeof raw.subjectBrief !== "string"
     || !isHistory(raw.history)
     || (raw.precision !== "simple" && raw.precision !== "standard" && raw.precision !== "detailed")
+    || (raw.journeyRequestId !== undefined && typeof raw.journeyRequestId !== "string")
     || (raw.journeyId !== undefined && typeof raw.journeyId !== "string")
     || (raw.journeyToken !== undefined && typeof raw.journeyToken !== "string")
     || (raw.rawContentConsent !== undefined && typeof raw.rawContentConsent !== "boolean")
     || (raw.complete !== undefined && typeof raw.complete !== "boolean")) {
     throw new Error("invalid_journey_state");
   }
-  return raw as unknown as JourneyInput;
+  return {
+    subjectBrief: raw.subjectBrief,
+    history: raw.history,
+    precision: raw.precision,
+    ...(raw.journeyRequestId === undefined ? {} : { journeyRequestId: raw.journeyRequestId }),
+    ...(raw.journeyId === undefined ? {} : { journeyId: raw.journeyId }),
+    ...(raw.journeyToken === undefined ? {} : { journeyToken: raw.journeyToken }),
+    ...(raw.rawContentConsent === undefined ? {} : { rawContentConsent: raw.rawContentConsent }),
+    ...(raw.complete === undefined ? {} : { complete: raw.complete }),
+  };
 }
 
-function isClientJourneyId(value: string): boolean {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+function isJourneyRequestId(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
 function isCanonicalCompletionExtension(
@@ -157,9 +194,12 @@ export async function handleJourneyTurnRequest(
 
   let input: JourneyInput;
   try {
-    input = parseInput(await request.json());
+    input = parseInput(await readRequestJson(request));
   } catch (error) {
-    return json({ error: error instanceof Error ? error.message : "invalid_journey_state" }, 400);
+    const code = error instanceof Error && error.message === "journey_request_too_large"
+      ? error.message
+      : "invalid_journey_state";
+    return json({ error: code }, code === "journey_request_too_large" ? 413 : 400);
   }
   const now = deps.now();
   let journeyId: string;
@@ -169,20 +209,33 @@ export async function handleJourneyTurnRequest(
   let adaptiveTurnToken: string | undefined;
   const manifest = buildCatalogManifest();
   if (input.journeyToken === undefined) {
-    if (input.history.length !== 0 || input.complete === true) {
+    const requestId = input.journeyRequestId ?? input.journeyId;
+    if (input.history.length !== 0
+      || input.complete === true
+      || !requestId
+      || (input.journeyRequestId !== undefined && input.journeyId !== undefined)
+      || !isJourneyRequestId(requestId)) {
       return json({ error: "invalid_journey_state" }, 400);
     }
-    if (input.journeyId !== undefined && !isClientJourneyId(input.journeyId)) {
-      return json({ error: "invalid_journey_state" }, 400);
-    }
-    journeyId = input.journeyId ?? deps.newJourneyId();
+    journeyId = deriveJourneyId({
+      secret,
+      release,
+      requestId,
+      subjectBrief: input.subjectBrief,
+      precision: input.precision,
+      rawContentConsent: input.rawContentConsent === true,
+    });
     route = assignJourneyRoute(release, journeyId, exposure);
     consent = input.rawContentConsent === true
       ? { version: RAW_CONTENT_CONSENT_VERSION, acceptedAt: now }
       : null;
     rawContentSampled = consent !== null && assignRawContentSample(secret, release, journeyId);
   } else {
-    if (!input.journeyId) return json({ error: "invalid_journey_state" }, 400);
+    if (!input.journeyId
+      || input.journeyRequestId !== undefined
+      || input.rawContentConsent !== undefined) {
+      return json({ error: "invalid_journey_state" }, 400);
+    }
     try {
       const claims = readJourneyToken(secret, input.journeyToken, now);
       if (claims.journeyId !== input.journeyId || claims.release !== release) {

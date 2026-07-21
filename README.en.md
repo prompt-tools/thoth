@@ -75,11 +75,14 @@ RAW_CONTENT_RETENTION_VERIFIED=1
 Every raw-store key is written with an absolute `PXAT` no later than
 `recordedAt + 14 days`; that constrains only the Redis key TTL. It does not
 prove ACLs, backup retention, log retention, or provider/all-media retention.
-The client generates the initial Journey ID so a retry after a lost first
-response keeps the same Journey. The server-secret HMAC prevents offline
-sample prediction, but repeated online Journey creation can still skew the
-sample; rate-limit new Journey creation at Vercel/WAF before enabling raw in
-production.
+The browser generates only a UUID creation nonce. The server derives the opaque
+Journey ID from `ADAPTIVE_TURN_SECRET`, release, nonce, Subject brief, precision,
+and consent, so an exact retry after a lost first response keeps the same ID and
+sample. `ADAPTIVE_TURN_SECRET` must contain at least 32 cryptographically random
+bytes and remain stable for the 30-minute token window and any lost-first-response
+retry window. The HMAC prevents offline sample prediction, but repeated online
+Journey creation can still skew the sample; rate-limit new Journey creation at
+Vercel/WAF before enabling raw in production.
 Production raw capture remains blocked/off in this implementation. The
 deployment owner must verify each access, abuse-control, and retention gate independently;
 this repository has no such proof, so `RAW_CONTENT_RETENTION_VERIFIED=1` must

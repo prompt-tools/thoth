@@ -293,12 +293,13 @@ describe("useAgentGuideController Built-in Journey routing", () => {
     act(() => result.current.startWithDescription("窗边的女学生"));
     await waitFor(() => expect(result.current.decision?.nextQuestionId).toBe("framing"));
     expect(result.current.adaptiveRouting).toBe(false);
-    const firstJourneyId = clientMocks.requestJourneyTurn.mock.calls[0][0].journeyId;
-    expect(firstJourneyId).toMatch(/^[0-9a-f-]{36}$/i);
+    const firstJourneyRequestId = clientMocks.requestJourneyTurn.mock.calls[0][0].journeyRequestId;
+    expect(firstJourneyRequestId).toMatch(/^[0-9a-f-]{36}$/i);
     expect(clientMocks.requestJourneyTurn.mock.calls[0][0]).toMatchObject({
-      journeyId: firstJourneyId,
+      journeyRequestId: firstJourneyRequestId,
       rawContentConsent: false,
     });
+    expect(clientMocks.requestJourneyTurn.mock.calls[0][0]).not.toHaveProperty("journeyId");
 
     act(() => result.current.toggleDraft(framingIds[0]));
     act(() => result.current.submitStep());
@@ -314,8 +315,9 @@ describe("useAgentGuideController Built-in Journey routing", () => {
     act(() => result.current.restart());
     act(() => result.current.startWithDescription("另一位角色"));
     await waitFor(() => expect(clientMocks.requestJourneyTurn).toHaveBeenCalledTimes(3));
-    expect(clientMocks.requestJourneyTurn.mock.calls[2][0].journeyId).toMatch(/^[0-9a-f-]{36}$/i);
-    expect(clientMocks.requestJourneyTurn.mock.calls[2][0].journeyId).not.toBe(firstJourneyId);
+    expect(clientMocks.requestJourneyTurn.mock.calls[2][0].journeyRequestId).toMatch(/^[0-9a-f-]{36}$/i);
+    expect(clientMocks.requestJourneyTurn.mock.calls[2][0].journeyRequestId).not.toBe(firstJourneyRequestId);
+    expect(clientMocks.requestJourneyTurn.mock.calls[2][0]).not.toHaveProperty("journeyId");
     expect(clientMocks.requestJourneyTurn.mock.calls[2][0]).not.toHaveProperty("journeyToken");
     expect(clientMocks.requestJourneyTurn.mock.calls[2][0]).toMatchObject({ rawContentConsent: false });
   });
@@ -328,8 +330,8 @@ describe("useAgentGuideController Built-in Journey routing", () => {
     ];
     clientMocks.requestJourneyTurn
       .mockRejectedValueOnce(new Error("response lost"))
-      .mockImplementationOnce(async (input: { journeyId: string }) => ({
-        journey: { id: input.journeyId, route: "fixed", token: "journey-token-1" },
+      .mockImplementationOnce(async () => ({
+        journey: { id: "server-journey-1", route: "fixed", token: "journey-token-1" },
         decision: { nextQuestionId: "framing", visibleOptionIds: framingIds, done: false },
         diagnostics: { source: "ordered", fallbackUsed: false },
         rawContentEligible: false,
@@ -345,7 +347,8 @@ describe("useAgentGuideController Built-in Journey routing", () => {
     act(() => result.current.retryStep());
     await waitFor(() => expect(result.current.decision?.nextQuestionId).toBe("framing"));
 
-    expect(firstInput.journeyId).toMatch(/^[0-9a-f-]{36}$/i);
+    expect(firstInput.journeyRequestId).toMatch(/^[0-9a-f-]{36}$/i);
+    expect(firstInput).not.toHaveProperty("journeyId");
     expect(clientMocks.requestJourneyTurn.mock.calls[1][0]).toEqual(firstInput);
     expect(firstInput).toMatchObject({ rawContentConsent: true, history: [] });
   });

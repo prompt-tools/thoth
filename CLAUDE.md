@@ -60,7 +60,7 @@ Server-only env vars (never `NEXT_PUBLIC_`, never in the browser bundle):
 | Var | Purpose |
 |-----|---------|
 | `DEMO_DEEPSEEK_KEY` | Built-in model key used only from server provider boundaries |
-| `ADAPTIVE_TURN_SECRET` | HMAC secret of at least 32 UTF-8 bytes, signing Journey and accepted-Ask state |
+| `ADAPTIVE_TURN_SECRET` | HMAC secret containing at least 32 cryptographically random bytes; derives opaque Journey IDs and signs Journey/accepted-Ask state. Keep it stable for the 30-minute token window and any lost-first-response retry window |
 | `JOURNEY_RELEASE` | Stable release identifier used in signed Journey claims and Canary assignment; falls back to `VERCEL_GIT_COMMIT_SHA`, then `local` |
 | `ADAPTIVE_CANARY_EXPOSURE=0|10|50|100` | Percentage of new Built-in Journeys assigned to Adaptive; defaults to `0` |
 | `ADAPTIVE_ROUTING_ENABLED=1` | Allow non-zero Adaptive exposure and the legacy BYOK Adaptive boundary; absent forces new Built-in Journeys to fixed |

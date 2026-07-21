@@ -64,6 +64,27 @@ export function parseJourneyExposure(value: string | undefined): 0 | 10 | 50 | 1
   throw new Error("invalid_journey_exposure");
 }
 
+export function deriveJourneyId(args: {
+  secret: string;
+  release: string;
+  requestId: string;
+  subjectBrief: string;
+  precision: Precision;
+  rawContentConsent: boolean;
+}): string {
+  const envelope = {
+    version: 1,
+    release: args.release,
+    requestId: args.requestId.toLowerCase(),
+    subjectBrief: args.subjectBrief,
+    precision: args.precision,
+    rawContentConsent: args.rawContentConsent,
+  };
+  return createHmac("sha256", args.secret)
+    .update(`journey-id:v1:${JSON.stringify(envelope)}`, "utf8")
+    .digest("base64url");
+}
+
 export function assignJourneyRoute(
   release: string,
   journeyId: string,

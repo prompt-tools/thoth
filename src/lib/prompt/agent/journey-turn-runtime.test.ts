@@ -9,6 +9,7 @@ import { buildAdaptiveTurnSnapshot } from "./adaptive-turn";
 import { buildCatalogManifest } from "./catalog-manifest";
 import {
   assignRawContentSample,
+  deriveJourneyId,
   issueJourneyToken,
   matchesJourneySnapshot,
   readJourneyToken,
@@ -20,12 +21,31 @@ import {
 } from "./raw-content-store";
 
 const SECRET = "a-strong-test-secret-with-at-least-32-bytes";
+const REQUEST_ID = "00000000-0000-4000-8000-00000000000d";
+const SAMPLED_REQUEST_ID = "00000000-0000-4000-8000-000000000000";
+const THRESHOLD_REQUEST_ID = "00000000-0000-4000-8000-000000000002";
+const PRE_CHANGE_UUID_TOKEN = "eyJ2ZXJzaW9uIjoxLCJqb3VybmV5SWQiOiIwMDAwMDAwMC0wMDAwLTQwMDAtODAwMC0wMDAwMDAwMDAwMGQiLCJyZWxlYXNlIjoicmVsZWFzZS1hIiwicm91dGUiOiJmaXhlZCIsInR1cm4iOjEsInN1YmplY3RIYXNoIjoiNU9sMzFFdy1NOUxCdmJDZV9zQTB5M1M3WUc5YV9iS2EwWFE4YkhvRFFTSSIsImhpc3RvcnlIYXNoIjoibE9sZVQ3ZE42blFIb09SQU91LTV5eFZzWGRlVzA0eDJlY24xQWFsMFJ2WSIsInByZWNpc2lvbiI6InNpbXBsZSIsInN0YXRlIjp7ImtpbmQiOiJkb25lIn0sImlzc3VlZEF0IjoxNzAwMDAwMDAwMDAwLCJjb25zZW50IjpudWxsLCJyYXdDb250ZW50U2FtcGxlZCI6ZmFsc2UsImV4cGlyZXNBdCI6MTcwMDAwMTgwMDAwMH0.GRRgiqILKz6Chh8Sj_ha1IhKwD0_11iMIFTm1QU0crw";
 
-function request(body: unknown): Request {
+function request(body: unknown, injectCreationNonce = true): Request {
+  const payload = body && typeof body === "object" && !Array.isArray(body)
+    && injectCreationNonce
+    && !("journeyToken" in body)
+    && !("journeyRequestId" in body)
+    && !("journeyId" in body)
+    ? { journeyRequestId: REQUEST_ID, ...body }
+    : body;
   return new Request("http://localhost/api/journey-turn", {
     method: "POST",
     headers: { authorization: "Bearer __demo__", "content-type": "application/json" },
-    body: JSON.stringify(body),
+    body: JSON.stringify(payload),
+  });
+}
+
+function rawRequest(body: string): Request {
+  return new Request("http://localhost/api/journey-turn", {
+    method: "POST",
+    headers: { authorization: "Bearer __demo__", "content-type": "application/json" },
+    body,
   });
 }
 
@@ -68,6 +88,21 @@ function fixedModelResponse(subjectBrief = "原创游侠角色") {
   };
 }
 
+function journeyIdFor(args: {
+  requestId?: string;
+  subjectBrief?: string;
+  rawContentConsent?: boolean;
+} = {}): string {
+  return deriveJourneyId({
+    secret: SECRET,
+    release: "release-a",
+    requestId: args.requestId ?? REQUEST_ID,
+    subjectBrief: args.subjectBrief ?? "原创游侠角色",
+    precision: "simple",
+    rawContentConsent: args.rawContentConsent === true,
+  });
+}
+
 describe("Built-in Journey HTTP boundary", () => {
   it("persists a content-free fixed attempt before the provider and finalizes the validated Ask", async () => {
     const events: string[] = [];
@@ -96,14 +131,13 @@ describe("Built-in Journey HTTP boundary", () => {
     const response = await handleJourneyTurnRequest(request({
       subjectBrief: "不要把这段主体描述写进 attempt",
       history: [],
-      precision: "simple",
+      precision: "simple" as const,
     }), {
       secret: SECRET,
       release: "release-a",
       exposure: "0",
       demoKey: "server-key",
       now: () => 1_700_000_000_000,
-      newJourneyId: () => "journey-1",
       newAttemptId: () => "attempt-1",
       attemptStore,
       fixedTransport,
@@ -114,7 +148,7 @@ describe("Built-in Journey HTTP boundary", () => {
     expect(events).toEqual(["started", "provider", "terminal"]);
     expect(started).toEqual([expect.objectContaining({
       attemptId: "attempt-1",
-      journeyId: "journey-1",
+      journeyId: journeyIdFor({ subjectBrief: "不要把这段主体描述写进 attempt" }),
       release: "release-a",
       route: "fixed",
       cohort: "fixed",
@@ -144,7 +178,6 @@ describe("Built-in Journey HTTP boundary", () => {
       exposure: "0",
       demoKey: "server-key",
       now: () => 1_700_000_000_000,
-      newJourneyId: () => "journey-1",
       newAttemptId: () => `attempt-${++sequence}`,
       attemptStore: {
         start: async (record) => {
@@ -188,7 +221,6 @@ describe("Built-in Journey HTTP boundary", () => {
       exposure: "0",
       demoKey: "server-key",
       now: () => 1_700_000_000_000,
-      newJourneyId: () => "journey-1",
       newAttemptId: () => "attempt-1",
       attemptStore: {
         start: async () => { throw new Error("redis offline"); },
@@ -215,7 +247,6 @@ describe("Built-in Journey HTTP boundary", () => {
       exposure: "0",
       demoKey: "server-key",
       now: () => 1_700_000_000_000,
-      newJourneyId: () => "journey-1",
       newAttemptId: () => "attempt-1",
       attemptStore: {
         start: async () => "created",
@@ -246,7 +277,6 @@ describe("Built-in Journey HTTP boundary", () => {
       exposure: "100",
       demoKey: "server-key",
       now: () => 1_700_000_000_000,
-      newJourneyId: () => "journey-adaptive",
       newAttemptId: () => "attempt-adaptive-1",
       attemptStore: {
         start: async (record) => {
@@ -285,7 +315,7 @@ describe("Built-in Journey HTTP boundary", () => {
     expect(response.status).toBe(200);
     expect(started).toEqual([expect.objectContaining({
       attemptId: "attempt-adaptive-1",
-      journeyId: "journey-adaptive",
+      journeyId: journeyIdFor(),
       release: "release-a",
       route: "adaptive",
       cohort: "adaptive",
@@ -307,7 +337,6 @@ describe("Built-in Journey HTTP boundary", () => {
       exposure: "0",
       demoKey: "server-key",
       now: () => 1_700_000_000_000,
-      newJourneyId: () => "journey-1",
       newAttemptId: () => `attempt-${++sequence}`,
       attemptStore: {
         start: async (record) => {
@@ -316,7 +345,7 @@ describe("Built-in Journey HTTP boundary", () => {
         },
         finish: async () => "written",
       },
-      fixedTransport: async () => ({}),
+      fixedTransport: vi.fn(async () => ({})),
       adaptiveExchange: vi.fn(),
     };
     const first = await (await handleJourneyTurnRequest(request({
@@ -341,9 +370,9 @@ describe("Built-in Journey HTTP boundary", () => {
     expect(firstTry.status).toBe(200);
     expect(manualRetry.status).toBe(200);
     expect(started).toEqual([
-      expect.objectContaining({ attemptId: "attempt-1", journeyId: "journey-1", turn: 0 }),
-      expect.objectContaining({ attemptId: "attempt-2", journeyId: "journey-1", turn: 1 }),
-      expect.objectContaining({ attemptId: "attempt-3", journeyId: "journey-1", turn: 1 }),
+      expect.objectContaining({ attemptId: "attempt-1", journeyId: first.journey.id, turn: 0 }),
+      expect.objectContaining({ attemptId: "attempt-2", journeyId: first.journey.id, turn: 1 }),
+      expect.objectContaining({ attemptId: "attempt-3", journeyId: first.journey.id, turn: 1 }),
     ]);
   });
 
@@ -363,7 +392,6 @@ describe("Built-in Journey HTTP boundary", () => {
       exposure: "0",
       demoKey: "server-key",
       now: () => now,
-      newJourneyId: () => "journey-default-off",
       ...attemptDeps(),
       fixedTransport: async () => ({}),
       adaptiveExchange: vi.fn(),
@@ -391,7 +419,6 @@ describe("Built-in Journey HTTP boundary", () => {
       exposure: "0",
       demoKey: "server-key",
       now: () => 1_700_000_000_000,
-      newJourneyId: () => "journey-invalid-consent",
       ...attemptDeps(),
       fixedTransport,
       adaptiveExchange: vi.fn(),
@@ -420,7 +447,6 @@ describe("Built-in Journey HTTP boundary", () => {
       exposure: "0",
       demoKey: "server-key",
       now: () => now,
-      newJourneyId: () => "consent-6",
       ...attemptDeps(),
       fixedTransport: async () => ({}),
       adaptiveExchange: vi.fn(),
@@ -429,21 +455,22 @@ describe("Built-in Journey HTTP boundary", () => {
 
     expect(response.status).toBe(200);
     expect(readJourneyToken(SECRET, result.journey.token, now)).toMatchObject({
-      journeyId: "consent-6",
+      journeyId: journeyIdFor({ rawContentConsent: true }),
       issuedAt: now,
       consent: { version: 1, acceptedAt: now },
       rawContentSampled: false,
     });
   });
 
-  it("adopts a validated client Journey ID and keeps first-response retries on a secret sample", async () => {
-    const clientJourneyId = "00000000-0000-4000-8000-00000000000d";
-    const newJourneyId = vi.fn(() => "server-generated");
+  it("derives an opaque server Journey ID and keeps exact creation retries stable", async () => {
+    const journeyRequestId = "00000000-0000-4000-8000-00000000000D";
+    const started: Array<{ attemptId: string; journeyId: string }> = [];
+    let attempt = 0;
     const body = {
       subjectBrief: "原创游侠角色",
       history: [],
-      precision: "simple",
-      journeyId: clientJourneyId,
+      precision: "simple" as const,
+      journeyRequestId,
       rawContentConsent: true,
       rawContentSampled: false,
       rawContentEligible: false,
@@ -454,8 +481,14 @@ describe("Built-in Journey HTTP boundary", () => {
       exposure: "0",
       demoKey: "server-key",
       now: () => 1_700_000_000_000,
-      newJourneyId,
-      ...attemptDeps(),
+      newAttemptId: () => `attempt-${++attempt}`,
+      attemptStore: {
+        start: async (record) => {
+          started.push(record);
+          return "created";
+        },
+        finish: async () => "written",
+      },
       fixedTransport: async () => fixedModelResponse(),
       adaptiveExchange: vi.fn(),
       rawContentSamplingEnabled: true,
@@ -463,46 +496,38 @@ describe("Built-in Journey HTTP boundary", () => {
 
     const first = await (await handleJourneyTurnRequest(request(body), deps)).json();
     const retry = await (await handleJourneyTurnRequest(request(body), deps)).json();
-    const otherSecret = await (await handleJourneyTurnRequest(request({
+    const legacy = await (await handleJourneyTurnRequest(request({
       ...body,
-      rawContentSampled: true,
-      rawContentEligible: true,
-    }), {
-      ...deps,
-      secret: "another-strong-test-secret-over-32-bytes",
-    })).json();
-    const unsampledJourneyId = "00000000-0000-4000-8000-000000000002";
-    const unsampled = await (await handleJourneyTurnRequest(request({
-      ...body,
-      journeyId: unsampledJourneyId,
+      journeyRequestId: undefined,
+      journeyId: journeyRequestId.toLowerCase(),
     }), deps)).json();
 
-    expect(newJourneyId).not.toHaveBeenCalled();
-    expect(first.journey.id).toBe(clientJourneyId);
-    expect(retry.journey.id).toBe(clientJourneyId);
-    expect(readJourneyToken(SECRET, first.journey.token, 1_700_000_000_000).rawContentSampled).toBe(true);
-    expect(readJourneyToken(SECRET, retry.journey.token, 1_700_000_000_000).rawContentSampled).toBe(true);
-    expect(first.rawContentEligible).toBe(true);
-    expect(retry.rawContentEligible).toBe(true);
-    expect(assignRawContentSample(SECRET, "release-a", clientJourneyId)).toBe(true);
-    expect(assignRawContentSample(
-      "another-strong-test-secret-over-32-bytes",
-      "release-a",
-      clientJourneyId,
-    )).toBe(false);
-    expect(readJourneyToken(
-      "another-strong-test-secret-over-32-bytes",
-      otherSecret.journey.token,
-      1_700_000_000_000,
-    ).rawContentSampled).toBe(false);
-    expect(otherSecret.rawContentEligible).toBe(false);
-    expect(assignRawContentSample(SECRET, "release-a", unsampledJourneyId)).toBe(false);
-    expect(readJourneyToken(
-      SECRET,
-      unsampled.journey.token,
-      1_700_000_000_000,
-    ).rawContentSampled).toBe(false);
-    expect(unsampled.rawContentEligible).toBe(false);
+    expect(first.journey.id).toBe(deriveJourneyId({
+      secret: SECRET,
+      release: "release-a",
+      requestId: journeyRequestId,
+      subjectBrief: body.subjectBrief,
+      precision: body.precision,
+      rawContentConsent: true,
+    }));
+    expect(first.journey.id).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(first.journey.id).not.toBe(journeyRequestId);
+    expect(retry.journey.id).toBe(first.journey.id);
+    expect(legacy.journey.id).toBe(first.journey.id);
+    expect(retry.journey.route).toBe(first.journey.route);
+    expect(legacy.journey.route).toBe(first.journey.route);
+    expect(started).toEqual([
+      expect.objectContaining({ attemptId: "attempt-1", journeyId: first.journey.id }),
+      expect.objectContaining({ attemptId: "attempt-2", journeyId: first.journey.id }),
+      expect.objectContaining({ attemptId: "attempt-3", journeyId: first.journey.id }),
+    ]);
+    const sampled = assignRawContentSample(SECRET, "release-a", first.journey.id);
+    expect(readJourneyToken(SECRET, first.journey.token, 1_700_000_000_000).rawContentSampled)
+      .toBe(sampled);
+    expect(readJourneyToken(SECRET, retry.journey.token, 1_700_000_000_000).rawContentSampled)
+      .toBe(sampled);
+    expect(first.rawContentEligible).toBe(sampled);
+    expect(retry.rawContentEligible).toBe(sampled);
   });
 
   it("rejects an invalid client Journey ID before provider execution", async () => {
@@ -518,7 +543,6 @@ describe("Built-in Journey HTTP boundary", () => {
       exposure: "0",
       demoKey: "server-key",
       now: () => 1_700_000_000_000,
-      newJourneyId: vi.fn(() => "server-generated"),
       ...attemptDeps(),
       fixedTransport,
       adaptiveExchange: vi.fn(),
@@ -530,9 +554,118 @@ describe("Built-in Journey HTTP boundary", () => {
   });
 
   it.each([
-    ["consent-0", true],
-    ["consent-6", false],
-  ])("keeps the server sample for %s stable across a turn and manual retry", async (journeyId, sampled) => {
+    ["missing nonce", {}],
+    ["both nonce fields", { journeyRequestId: REQUEST_ID, journeyId: REQUEST_ID }],
+    ["malformed nonce", { journeyRequestId: "not-a-uuid" }],
+    ["non-v4 UUID", { journeyRequestId: "00000000-0000-5000-8000-00000000000d" }],
+    ["non-empty history", {
+      journeyRequestId: REQUEST_ID,
+      history: [{ questionId: "subject", selectedOptionIds: [] }],
+    }],
+    ["Completion", { journeyRequestId: REQUEST_ID, complete: true }],
+  ])("rejects creation with %s before attempt or provider work", async (_kind, fields) => {
+    const start = vi.fn(async () => "created" as const);
+    const fixedTransport = vi.fn<JourneyTurnRuntimeDeps["fixedTransport"]>();
+    const response = await handleJourneyTurnRequest(request({
+      subjectBrief: "原创游侠角色",
+      history: [],
+      precision: "simple",
+      ...fields,
+    }, false), {
+      secret: SECRET,
+      release: "release-a",
+      exposure: "0",
+      demoKey: "server-key",
+      now: () => 1_700_000_000_000,
+      newAttemptId: () => "attempt-1",
+      attemptStore: { start, finish: async () => "written" },
+      fixedTransport,
+      adaptiveExchange: vi.fn(),
+    });
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: "invalid_journey_state" });
+    expect(start).not.toHaveBeenCalled();
+    expect(fixedTransport).not.toHaveBeenCalled();
+  });
+
+  it("accepts 65,536 request bytes and rejects byte 65,537 before parsing or side effects", async () => {
+    const base = {
+      subjectBrief: "",
+      history: [],
+      precision: "simple",
+      journeyRequestId: REQUEST_ID,
+    };
+    const emptyBytes = Buffer.byteLength(JSON.stringify(base), "utf8");
+    const exactBody = JSON.stringify({ ...base, subjectBrief: "x".repeat(65_536 - emptyBytes) });
+    expect(Buffer.byteLength(exactBody, "utf8")).toBe(65_536);
+    const start = vi.fn(async () => "created" as const);
+    const fixedTransport = vi.fn(async () => fixedModelResponse("x".repeat(65_536 - emptyBytes)));
+    const deps: JourneyTurnRuntimeDeps = {
+      secret: SECRET,
+      release: "release-a",
+      exposure: "0",
+      demoKey: "server-key",
+      now: () => 1_700_000_000_000,
+      newAttemptId: () => "attempt-1",
+      attemptStore: { start, finish: async () => "written" },
+      fixedTransport,
+      adaptiveExchange: vi.fn(),
+    };
+
+    const exact = await handleJourneyTurnRequest(rawRequest(exactBody), deps);
+    start.mockClear();
+    fixedTransport.mockClear();
+    const oversized = await handleJourneyTurnRequest(rawRequest("{".repeat(65_537)), deps);
+    const malformed = await handleJourneyTurnRequest(rawRequest("{"), deps);
+    const empty = await handleJourneyTurnRequest(new Request("http://localhost/api/journey-turn", {
+      method: "POST",
+      headers: { authorization: "Bearer __demo__", "content-type": "application/json" },
+    }), deps);
+
+    expect(exact.status).toBe(200);
+    expect(oversized.status).toBe(413);
+    expect(await oversized.json()).toEqual({ error: "journey_request_too_large" });
+    expect(malformed.status).toBe(400);
+    expect(await malformed.json()).toEqual({ error: "invalid_journey_state" });
+    expect(empty.status).toBe(400);
+    expect(await empty.json()).toEqual({ error: "invalid_journey_state" });
+    expect(start).not.toHaveBeenCalled();
+    expect(fixedTransport).not.toHaveBeenCalled();
+  });
+
+  it("continues a frozen pre-change v1 token containing a UUID Journey ID", async () => {
+    const fixedTransport = vi.fn<JourneyTurnRuntimeDeps["fixedTransport"]>();
+    const response = await handleJourneyTurnRequest(request({
+      subjectBrief: "旧版 Journey",
+      history: [{ questionId: "subject", selectedOptionIds: ["image_subject:single_person"] }],
+      precision: "simple",
+      journeyId: REQUEST_ID,
+      journeyToken: PRE_CHANGE_UUID_TOKEN,
+      complete: true,
+    }), {
+      secret: SECRET,
+      release: "release-a",
+      exposure: "0",
+      demoKey: "server-key",
+      now: () => 1_700_000_001_000,
+      ...attemptDeps(),
+      fixedTransport,
+      adaptiveExchange: vi.fn(),
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      journey: { id: REQUEST_ID, route: "fixed", token: PRE_CHANGE_UUID_TOKEN },
+      decision: { done: true },
+    });
+    expect(fixedTransport).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [SAMPLED_REQUEST_ID, true],
+    [REQUEST_ID, false],
+  ])("keeps the server sample for request %s stable across a turn and manual retry", async (requestId, sampled) => {
     let now = 1_700_000_000_000;
     const rawWrite = vi.fn<RawContentStore["write"]>(async () => "stored");
     const background = afterResponseQueue();
@@ -542,7 +675,6 @@ describe("Built-in Journey HTTP boundary", () => {
       exposure: "0",
       demoKey: "server-key",
       now: () => now,
-      newJourneyId: () => journeyId,
       ...attemptDeps(),
       fixedTransport: async () => fixedModelResponse(),
       adaptiveExchange: vi.fn(),
@@ -554,6 +686,7 @@ describe("Built-in Journey HTTP boundary", () => {
       subjectBrief: "原创游侠角色",
       history: [],
       precision: "simple",
+      journeyRequestId: requestId,
       rawContentConsent: true,
     }), deps)).json();
     const firstClaims = readJourneyToken(SECRET, first.journey.token, now);
@@ -604,7 +737,17 @@ describe("Built-in Journey HTTP boundary", () => {
     ] : []);
   });
 
-  it("does not let continuation fields elevate an unconsented Journey", async () => {
+  it.each([
+    ["consent", {
+      rawContentConsent: true,
+      consent: { version: 1, acceptedAt: 1_700_000_001_000 },
+      consentVersion: 1,
+      acceptedAt: 1_700_000_001_000,
+      issuedAt: 1_700_000_001_000,
+      rawContentSampled: true,
+    }],
+    ["request nonce", { journeyRequestId: REQUEST_ID }],
+  ])("rejects creation-only %s on continuation before provider execution", async (_kind, fields) => {
     let now = 1_700_000_000_000;
     const deps: JourneyTurnRuntimeDeps = {
       secret: SECRET,
@@ -612,9 +755,8 @@ describe("Built-in Journey HTTP boundary", () => {
       exposure: "0",
       demoKey: "server-key",
       now: () => now,
-      newJourneyId: () => "consent-6",
       ...attemptDeps(),
-      fixedTransport: async () => ({}),
+      fixedTransport: vi.fn(async () => ({})),
       adaptiveExchange: vi.fn(),
     };
     const first = await (await handleJourneyTurnRequest(request({
@@ -623,7 +765,7 @@ describe("Built-in Journey HTTP boundary", () => {
       precision: "simple",
     }), deps)).json();
     now += 1_000;
-    const second = await (await handleJourneyTurnRequest(request({
+    const second = await handleJourneyTurnRequest(request({
       subjectBrief: "原创游侠角色",
       history: [{
         questionId: first.decision.nextQuestionId,
@@ -632,28 +774,22 @@ describe("Built-in Journey HTTP boundary", () => {
       precision: "simple",
       journeyId: first.journey.id,
       journeyToken: first.journey.token,
-      rawContentConsent: true,
-      consent: { version: 1, acceptedAt: now },
-      consentVersion: 1,
-      acceptedAt: now,
-      issuedAt: now,
-      rawContentSampled: true,
-    }), deps)).json();
+      ...fields,
+    }), deps);
 
-    expect(readJourneyToken(SECRET, second.journey.token, now)).toMatchObject({
-      consent: null,
-      rawContentSampled: false,
-    });
+    expect(second.status).toBe(400);
+    expect(await second.json()).toEqual({ error: "invalid_journey_state" });
+    expect(deps.fixedTransport).toHaveBeenCalledTimes(1);
   });
 
   it.each([
-    ["unconsented", "consent-6", undefined, true, 0],
-    ["unsampled", "consent-6", true, true, 0],
-    ["deployment-disabled", "consent-0", true, false, 0],
-    ["authorized", "consent-0", true, true, 1],
+    ["unconsented", REQUEST_ID, undefined, true, 0],
+    ["unsampled", REQUEST_ID, true, true, 0],
+    ["deployment-disabled", SAMPLED_REQUEST_ID, true, false, 0],
+    ["authorized", SAMPLED_REQUEST_ID, true, true, 1],
   ])("gates fixed raw provider capture when %s", async (
     _kind,
-    journeyId,
+    journeyRequestId,
     rawContentConsent,
     rawContentSamplingEnabled,
     expectedWrites,
@@ -671,6 +807,7 @@ describe("Built-in Journey HTTP boundary", () => {
       subjectBrief: "原创游侠角色",
       history: [],
       precision: "simple",
+      journeyRequestId,
       rawContentConsent,
     }), {
       secret: SECRET,
@@ -678,7 +815,6 @@ describe("Built-in Journey HTTP boundary", () => {
       exposure: "0",
       demoKey: "server-key",
       now: () => now,
-      newJourneyId: () => journeyId,
       ...attemptDeps(),
       fixedTransport: async () => providerContent,
       adaptiveExchange: vi.fn(),
@@ -691,6 +827,7 @@ describe("Built-in Journey HTTP boundary", () => {
     expect(response.status).toBe(200);
     expect(write).toHaveBeenCalledTimes(expectedWrites);
     if (expectedWrites === 1) {
+      const journeyId = journeyIdFor({ requestId: journeyRequestId, rawContentConsent: true });
       expect(write).toHaveBeenCalledWith({
         version: 1,
         kind: "provider",
@@ -738,6 +875,7 @@ describe("Built-in Journey HTTP boundary", () => {
       subjectBrief,
       history: [],
       precision: "simple",
+      journeyRequestId: SAMPLED_REQUEST_ID,
       rawContentConsent: true,
     }), {
       secret: SECRET,
@@ -745,7 +883,6 @@ describe("Built-in Journey HTTP boundary", () => {
       exposure: "100",
       demoKey: "server-key",
       now: () => now,
-      newJourneyId: () => "consent-0",
       ...attemptDeps(),
       fixedTransport: vi.fn(),
       adaptiveExchange: async () => ({ kind: "http", status: 200, headers: {}, body: rawBody }),
@@ -757,7 +894,7 @@ describe("Built-in Journey HTTP boundary", () => {
 
     expect(response.status).toBe(200);
     expect(write).toHaveBeenCalledWith(expect.objectContaining({
-      journeyId: "consent-0",
+      journeyId: journeyIdFor({ requestId: SAMPLED_REQUEST_ID, rawContentConsent: true }),
       route: "adaptive",
       delivery: 0,
       providerContent: { choices: providerResponse.choices },
@@ -771,6 +908,7 @@ describe("Built-in Journey HTTP boundary", () => {
       subjectBrief: "原创游侠角色",
       history: [],
       precision: "simple",
+      journeyRequestId: SAMPLED_REQUEST_ID,
       rawContentConsent: true,
     }), {
       secret: SECRET,
@@ -778,7 +916,6 @@ describe("Built-in Journey HTTP boundary", () => {
       exposure: "0",
       demoKey: "server-key",
       now: () => 1_700_000_000_000,
-      newJourneyId: () => "consent-0",
       ...attemptDeps(),
       fixedTransport: async () => fixedModelResponse(),
       adaptiveExchange: vi.fn(),
@@ -800,6 +937,7 @@ describe("Built-in Journey HTTP boundary", () => {
       subjectBrief: "原创游侠角色",
       history: [],
       precision: "simple",
+      journeyRequestId: SAMPLED_REQUEST_ID,
       rawContentConsent: true,
     }), {
       secret: SECRET,
@@ -807,7 +945,6 @@ describe("Built-in Journey HTTP boundary", () => {
       exposure: "0",
       demoKey: "server-key",
       now: () => 1_700_000_000_000,
-      newJourneyId: () => "consent-0",
       ...attemptDeps(),
       fixedTransport: async () => fixedModelResponse(),
       adaptiveExchange: vi.fn(),
@@ -829,6 +966,7 @@ describe("Built-in Journey HTTP boundary", () => {
       subjectBrief: "原创游侠角色",
       history: [],
       precision: "simple",
+      journeyRequestId: SAMPLED_REQUEST_ID,
       rawContentConsent: true,
     }), {
       secret: SECRET,
@@ -836,7 +974,6 @@ describe("Built-in Journey HTTP boundary", () => {
       exposure: "0",
       demoKey: "server-key",
       now: () => 1_700_000_000_000,
-      newJourneyId: () => "consent-0",
       ...attemptDeps(),
       fixedTransport: async () => fixedModelResponse(),
       adaptiveExchange: vi.fn(),
@@ -875,7 +1012,6 @@ describe("Built-in Journey HTTP boundary", () => {
       exposure: "0",
       demoKey: "server-key",
       now: () => 1_700_000_000_000,
-      newJourneyId: () => "journey-1",
       ...attemptDeps(),
       fixedTransport,
       adaptiveExchange: vi.fn(),
@@ -883,7 +1019,7 @@ describe("Built-in Journey HTTP boundary", () => {
 
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({
-      journey: { id: "journey-1", route: "fixed", token: expect.any(String) },
+      journey: { id: journeyIdFor(), route: "fixed", token: expect.any(String) },
       decision: { done: false },
     });
     expect(fixedTransport).toHaveBeenCalledTimes(1);
@@ -898,7 +1034,6 @@ describe("Built-in Journey HTTP boundary", () => {
       exposure: "0",
       demoKey: "server-key",
       now: () => now,
-      newJourneyId: () => "journey-1",
       ...attemptDeps(),
       fixedTransport,
       adaptiveExchange: vi.fn(),
@@ -944,7 +1079,7 @@ describe("Built-in Journey HTTP boundary", () => {
 
     expect(response.status).toBe(200);
     expect(result).toMatchObject({
-      journey: { id: "journey-1", route: "fixed" },
+      journey: { id: first.journey.id, route: "fixed" },
       decision: { nextQuestionId: null, visibleOptionIds: [], done: true },
       rawContentEligible: false,
     });
@@ -964,7 +1099,6 @@ describe("Built-in Journey HTTP boundary", () => {
       exposure: "0",
       demoKey: "server-key",
       now: () => now,
-      newJourneyId: () => "journey-1",
       ...attemptDeps(),
       fixedTransport,
       adaptiveExchange: vi.fn(),
@@ -1050,7 +1184,6 @@ describe("Built-in Journey HTTP boundary", () => {
       exposure: "0",
       demoKey: "server-key",
       now: () => now,
-      newJourneyId: () => "unused",
       ...attemptDeps(),
       fixedTransport,
       adaptiveExchange: vi.fn(),
@@ -1102,7 +1235,6 @@ describe("Built-in Journey HTTP boundary", () => {
       exposure: "0",
       demoKey: "server-key",
       now: () => 1_700_000_000_000,
-      newJourneyId: () => "journey-1",
       ...attemptDeps(),
       fixedTransport,
       adaptiveExchange: vi.fn(),
@@ -1136,7 +1268,6 @@ describe("Built-in Journey HTTP boundary", () => {
       exposure: "0",
       demoKey: "server-key",
       now: () => 1_700_000_000_000,
-      newJourneyId: () => "journey-1",
       ...attemptDeps(),
       fixedTransport: vi.fn(async () => ({})),
       adaptiveExchange: vi.fn(),
@@ -1163,7 +1294,7 @@ describe("Built-in Journey HTTP boundary", () => {
 
     expect(secondResponse.status).toBe(200);
     expect(second).toMatchObject({
-      journey: { id: "journey-1", route: "fixed", token: expect.any(String) },
+      journey: { id: first.journey.id, route: "fixed", token: expect.any(String) },
       decision: { done: false },
     });
     expect(second.journey.token).not.toBe(first.journey.token);
@@ -1182,7 +1313,6 @@ describe("Built-in Journey HTTP boundary", () => {
       exposure: "100",
       demoKey: "server-key",
       now: () => 1_700_000_000_000,
-      newJourneyId: () => "journey-adaptive",
       ...attemptDeps(),
       fixedTransport,
       adaptiveExchange,
@@ -1225,7 +1355,6 @@ describe("Built-in Journey HTTP boundary", () => {
         exposure: "0",
         demoKey: "server-key",
         now: () => now,
-        newJourneyId: () => "journey-1",
         ...attemptDeps(),
         fixedTransport,
         adaptiveExchange: vi.fn(),
@@ -1271,13 +1400,13 @@ describe("Built-in Journey HTTP boundary", () => {
         subjectBrief: "原创游侠角色",
         history: [],
         precision: "simple",
+        journeyRequestId: THRESHOLD_REQUEST_ID,
       }), {
         secret: SECRET,
         release: "release-a",
         exposure,
         demoKey: "server-key",
         now: () => 1_700_000_000_000,
-        newJourneyId: () => "journey-0",
         ...attemptDeps(),
         fixedTransport: async () => ({}),
         adaptiveExchange: async () => ({ kind: "network", reason: "network_error" }),
@@ -1302,7 +1431,6 @@ describe("Built-in Journey HTTP boundary", () => {
       exposure: "25",
       demoKey: "server-key",
       now: () => 1_700_000_000_000,
-      newJourneyId: () => "journey-1",
       ...attemptDeps(),
       fixedTransport,
       adaptiveExchange,
