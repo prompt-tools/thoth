@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { after } from "next/server";
-import { liveAdaptiveExchange } from "@/lib/prompt/agent/adaptive-provider-http";
+import { liveAdaptiveExchange, readCappedResponseBody } from "@/lib/prompt/agent/adaptive-provider-http";
 import { handleJourneyTurnRequest } from "@/lib/prompt/agent/journey-turn-runtime";
 import { ProviderTransportError, type ProxyRequest } from "@/lib/prompt/agent/client";
 import { createRawContentStore } from "@/lib/prompt/agent/raw-content-store";
@@ -38,8 +38,11 @@ async function fixedTransport(request: ProxyRequest, callerSignal?: AbortSignal)
         redirect: "error",
         signal: controller.signal,
       });
-      text = await response.text();
+      const { body, bodyTooLarge } = await readCappedResponseBody(response);
+      if (bodyTooLarge) throw new ProviderTransportError("response_too_large", response.status);
+      text = new TextDecoder().decode(body);
     } catch (error) {
+      if (error instanceof ProviderTransportError) throw error;
       if (timedOut) throw new ProviderTransportError("provider_timeout");
       if (callerCancelled || (error instanceof DOMException && error.name === "AbortError")) {
         throw new ProviderTransportError("provider_cancelled");
@@ -86,7 +89,6 @@ export function POST(request: Request): Promise<Response> {
     exposure: adaptiveEnabled ? process.env.ADAPTIVE_CANARY_EXPOSURE ?? "0" : "0",
     demoKey: process.env.DEMO_DEEPSEEK_KEY,
     now: () => Date.now(),
-    newJourneyId: () => randomUUID(),
     newAttemptId: () => randomUUID(),
     attemptStore,
     rawContentStore,

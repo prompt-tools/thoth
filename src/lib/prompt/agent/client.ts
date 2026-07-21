@@ -71,6 +71,17 @@ function fixedFailure(error: unknown): {
   return { outcome: "failure", failureCode: "network_error" };
 }
 
+const NON_RETRYABLE_PROVIDER_FAILURES = new Set([
+  "provider_cancelled",
+  "request_too_large",
+  "response_too_large",
+]);
+
+function isNonRetryableProviderFailure(error: unknown): boolean {
+  return error instanceof ProviderTransportError
+    && NON_RETRYABLE_PROVIDER_FAILURES.has(error.failureCode);
+}
+
 /** Forward a provider-shaped request through our server-side proxy (avoids
  *  browser CORS for OpenAI-compatible providers). */
 async function callProxy(req: ProxyRequest): Promise<unknown> {
@@ -469,8 +480,7 @@ export async function runAgentTurn(
       break;
     } catch (error) {
       if (attempt) await opts.attemptLifecycle!.finish(attempt, fixedFailure(error));
-      if (t === maxRetries
-        || (error instanceof ProviderTransportError && error.failureCode === "provider_cancelled")) {
+      if (t === maxRetries || isNonRetryableProviderFailure(error)) {
         // All retries exhausted → fallback: use the pre-filtered option set
         // (respects category pre-filtering; avoids showing out-of-category options)
         const currentDim = ctx.pool[0];
@@ -636,6 +646,7 @@ export async function requestJourneyTurn(
     subjectBrief: string;
     history: AgentHistoryItem[];
     precision: Precision;
+    journeyRequestId?: string;
     journeyId?: string;
     journeyToken?: string;
     rawContentConsent?: boolean;

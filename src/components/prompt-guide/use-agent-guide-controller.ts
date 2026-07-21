@@ -174,6 +174,7 @@ export function useAgentGuideController() {
   const sessionRef = useRef(0);
   // Server-signed proof that may advance a legacy Adaptive Ask or Built-in Journey.
   const turnTokenRef = useRef("");
+  const journeyRequestIdRef = useRef("");
   const journeyIdRef = useRef("");
   const journeyRouteRef = useRef<"fixed" | "adaptive" | null>(null);
   const rawContentEligibleRef = useRef(false);
@@ -399,10 +400,14 @@ export function useAgentGuideController() {
               history: nextHistory,
               precision: precisionRef.current,
               ...(!turnTokenRef.current
-                ? { rawContentConsent: rawContentConsentRef.current }
-                : {}),
-              ...(journeyIdRef.current ? { journeyId: journeyIdRef.current } : {}),
-              ...(turnTokenRef.current ? { journeyToken: turnTokenRef.current } : {}),
+                ? {
+                    journeyRequestId: journeyRequestIdRef.current,
+                    rawContentConsent: rawContentConsentRef.current,
+                  }
+                : {
+                    journeyId: journeyIdRef.current,
+                    journeyToken: turnTokenRef.current,
+                  }),
             })
           : ADAPTIVE_ROUTING
             ? await requestAdaptiveTurn(keyRef.current, {
@@ -437,6 +442,7 @@ export function useAgentGuideController() {
         const diagnostics = browserProjection?.diagnostics ?? turnResult.diagnostics;
         if (sessionRef.current !== mySession) return; // superseded
         if (BUILTIN_DEMO && "journey" in turnResult) {
+          journeyRequestIdRef.current = "";
           journeyIdRef.current = turnResult.journey.id;
           journeyRouteRef.current = turnResult.journey.route;
           turnTokenRef.current = turnResult.journey.token;
@@ -583,6 +589,7 @@ export function useAgentGuideController() {
       sessionRef.current++; // void any in-flight fetch from a prior session
       consecutiveFallbackRef.current = 0;
       turnTokenRef.current = "";
+      journeyRequestIdRef.current = "";
       journeyIdRef.current = "";
       journeyRouteRef.current = null;
       rawContentEligibleRef.current = false;
@@ -621,7 +628,8 @@ export function useAgentGuideController() {
       setAutoFilledQuestionIds(new Set());
       clearAgentLog();
       turnTokenRef.current = "";
-      journeyIdRef.current = BUILTIN_DEMO ? crypto.randomUUID() : "";
+      journeyRequestIdRef.current = BUILTIN_DEMO ? crypto.randomUUID() : "";
+      journeyIdRef.current = "";
       journeyRouteRef.current = null;
       rawContentEligibleRef.current = false;
       journeySnapshotHistoryRef.current = [];
@@ -852,6 +860,7 @@ export function useAgentGuideController() {
     sessionRef.current++; // void any in-flight fetch
     consecutiveFallbackRef.current = 0;
     turnTokenRef.current = "";
+    journeyRequestIdRef.current = "";
     journeyIdRef.current = "";
     journeyRouteRef.current = null;
     rawContentEligibleRef.current = false;

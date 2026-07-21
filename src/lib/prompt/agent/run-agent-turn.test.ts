@@ -1,6 +1,13 @@
 import { describe, it, expect, vi } from "vitest";
 import "../init";
-import { buildTurnRequest, extractUsage, parseTurnResponse, requestAdaptiveTurn, runAgentTurn } from "./client";
+import {
+  buildTurnRequest,
+  extractUsage,
+  parseTurnResponse,
+  ProviderTransportError,
+  requestAdaptiveTurn,
+  runAgentTurn,
+} from "./client";
 import { buildCatalogManifest } from "./catalog-manifest";
 import type { AgentHistoryItem } from "./decision";
 import { activeDimensions } from "./active-dimensions";
@@ -204,6 +211,30 @@ describe("runAgentTurn (C-9b gradient)", () => {
     expect(decision.done).toBe(false);
     expect(diagnostics.fallbackUsed).toBe(true);
     expect(diagnostics.source).toBe("fallback");
+  });
+
+  it("does not retry a deterministic oversized provider request", async () => {
+    const transport = vi.fn(async () => {
+      throw new ProviderTransportError("request_too_large");
+    });
+    const start = vi.fn(async () => ({ attemptId: "attempt-1", startedAt: 1 }));
+    const finish = vi.fn(async () => undefined);
+
+    const { diagnostics } = await runAgentTurn(
+      provider,
+      "test-key",
+      { manifest, history: [], userDescription: "" },
+      transport,
+      { attemptLifecycle: { start, finish } },
+    );
+
+    expect(transport).toHaveBeenCalledTimes(1);
+    expect(start).toHaveBeenCalledTimes(1);
+    expect(finish).toHaveBeenCalledWith(
+      expect.objectContaining({ attemptId: "attempt-1" }),
+      { outcome: "failure", failureCode: "request_too_large" },
+    );
+    expect(diagnostics).toMatchObject({ source: "fallback", attempts: 1 });
   });
 
   // ⑥ Portrait-only subject pre-filter — model only receives people options

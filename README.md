@@ -72,7 +72,7 @@ RAW_CONTENT_SAMPLING_ENABLED=1
 RAW_CONTENT_RETENTION_VERIFIED=1
 ```
 
-每个 raw-store key 都以绝对 `PXAT` 写入，最晚为 `recordedAt + 14 天`；这只约束 Redis key TTL，不证明 ACL、备份、日志或 provider/all-media retention。为保证首个响应丢失后的重试仍使用同一 Journey，初始 Journey ID 由客户端生成；服务端密钥 HMAC 阻止离线预测抽样结果，但攻击者仍可通过反复创建 Journey 影响样本分布，因此生产启用 raw 前还必须在 Vercel/WAF 限制新 Journey 创建速率。生产环境 raw 仍保持关闭/blocked；部署负责人必须分别核验这些访问、滥用防护与保留门槛，当前仓库没有把它们当作已证实事实，未核验前不得在生产设置 `RAW_CONTENT_RETENTION_VERIFIED=1`。
+每个 raw-store key 都以绝对 `PXAT` 写入，最晚为 `recordedAt + 14 天`；这只约束 Redis key TTL，不证明 ACL、备份、日志或 provider/all-media retention。浏览器只为创建请求生成 UUID nonce；服务端使用 `ADAPTIVE_TURN_SECRET`、release、nonce、Subject brief、精度与 consent 派生不透明 Journey ID，因此相同创建请求在首个响应丢失后重试仍保持同一 ID 与抽样。`ADAPTIVE_TURN_SECRET` 必须包含至少 32 个密码学随机字节，并在 30 分钟 token 有效期及首响应重试窗口内保持稳定。HMAC 阻止离线预测，但攻击者仍可通过反复创建 Journey 影响样本分布，因此生产启用 raw 前还必须在 Vercel/WAF 限制新 Journey 创建速率。生产环境 raw 仍保持关闭/blocked；部署负责人必须分别核验这些访问、滥用防护与保留门槛，当前仓库没有把它们当作已证实事实，未核验前不得在生产设置 `RAW_CONTENT_RETENTION_VERIFIED=1`。
 
 `npm run verify:retention-live` 是默认跳过、显式 opt-in 的现场检查，只能使用隔离的非生产 Redis。它要求专用的测试凭据和明确的隔离确认：
 

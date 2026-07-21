@@ -1,6 +1,6 @@
 import { createHmac } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { issueJourneyToken, readJourneyToken } from "./journey-state";
+import { deriveJourneyId, issueJourneyToken, readJourneyToken } from "./journey-state";
 
 const SECRET = "a-strong-test-secret-with-at-least-32-bytes";
 const NOW = 1_700_000_000_000;
@@ -36,6 +36,37 @@ function alternateTrailingBits(value: string): string {
   const mask = (1 << unusedBits) - 1;
   return `${value.slice(0, -1)}${alphabet[(index & ~mask) | ((index + 1) & mask)]}`;
 }
+
+describe("Journey identity derivation", () => {
+  const input = {
+    secret: SECRET,
+    release: "release-a",
+    requestId: "00000000-0000-4000-8000-00000000000D",
+    subjectBrief: "雨夜女侦探",
+    precision: "simple" as const,
+    rawContentConsent: false,
+  };
+
+  it("derives a deterministic canonical opaque ID and normalizes UUID case", () => {
+    const id = deriveJourneyId(input);
+
+    expect(id).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(deriveJourneyId(input)).toBe(id);
+    expect(deriveJourneyId({ ...input, requestId: input.requestId.toLowerCase() })).toBe(id);
+    expect(id).not.toBe(input.requestId);
+  });
+
+  it.each([
+    ["secret", { secret: "another-strong-test-secret-over-32-bytes" }],
+    ["release", { release: "release-b" }],
+    ["request nonce", { requestId: "00000000-0000-4000-8000-00000000000e" }],
+    ["Subject brief", { subjectBrief: "晴天男记者" }],
+    ["precision", { precision: "detailed" as const }],
+    ["consent", { rawContentConsent: true }],
+  ])("changes when %s changes", (_field, change) => {
+    expect(deriveJourneyId({ ...input, ...change })).not.toBe(deriveJourneyId(input));
+  });
+});
 
 describe("Journey token encoding", () => {
   it("accepts a valid signed token", () => {
